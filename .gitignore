@@ -88,3 +88,8 @@ doxygen.log
 
 # Backup files
 *.bak
+
+# eclipse
+/.settings
+/.cproject
+/.project
