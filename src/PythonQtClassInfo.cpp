@@ -473,13 +473,35 @@ void PythonQtClassInfo::listDecoratorSlotsFromDecoratorProvider(QStringList& lis
 
 /**
  * Returns true, if the given method is considered "scriptable" - that means,
- * it is allowed to use it in a script.
- * We pass in the meta object and the property. So it is possible to check
- * for more things
+ * it is allowed to use it in a script
  */
 static bool propertyIsScriptable(const QMetaObject* _meta, const QMetaProperty& p)
 {
-	return p.isScriptable();
+	if (!p.isScriptable())
+	{
+		return false;
+	}
+
+	// we ignore the additional check for now until it is implemented
+	return true;
+
+	// The scriptable attribute is set by default for all properties. The following
+	// code uses another method to set the scriptable attribute using classinfo
+	// That means, if you have a property ActualValue, then you can define
+	// a class info like this:
+	// \code
+	// Q_CLASSINFO("ActualValue.scriptable", "true")
+	// \endcode
+    QString Name(p.name());
+	Name += ".scriptable";
+	int index = _meta->indexOfClassInfo(Name.toLatin1().constData());
+	if (index < 0)
+	{
+		return false;
+	}
+
+	QVariant v = _meta->classInfo(index).value();
+	return v.isValid() && v.toBool();
 }
 
 
@@ -543,7 +565,12 @@ QStringList PythonQtClassInfo::memberList()
     QList<PythonQtClassInfo*> infos;
     recursiveCollectClassInfos(infos);
     Q_FOREACH(PythonQtClassInfo* info, infos) {
-      info->listDecoratorSlotsFromDecoratorProvider(l, false);
+      // If we have a superclass, then we know that we are not QObject - QObject
+      // has no superClass and we do not want its decorators
+      if (info->metaObject()->superClass())
+      {
+    	  info->listDecoratorSlotsFromDecoratorProvider(l, false);
+      }
     }
   }
   
