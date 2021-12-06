@@ -471,6 +471,18 @@ void PythonQtClassInfo::listDecoratorSlotsFromDecoratorProvider(QStringList& lis
   }
 }
 
+/**
+ * Returns true, if the given method is considered "scriptable" - that means,
+ * it is allowed to use it in a script.
+ * We pass in the meta object and the property. So it is possible to check
+ * for more things
+ */
+static bool propertyIsScriptable(const QMetaObject* _meta, const QMetaProperty& p)
+{
+	return p.isScriptable();
+}
+
+
 QStringList PythonQtClassInfo::propertyList()
 {
   QStringList l;
@@ -479,7 +491,10 @@ QStringList PythonQtClassInfo::propertyList()
     int numProperties = _meta->propertyCount();
     for (i = 0; i < numProperties; i++) {
       QMetaProperty p = _meta->property(i);
-      l << QString(p.name());
+      if (propertyIsScriptable(_meta, p))
+      {
+    	  l << QString(p.name());
+      }
     }
   }
   QStringList members = memberList();
@@ -490,6 +505,17 @@ QStringList PythonQtClassInfo::propertyList()
   }
   return l;
 }
+
+
+/**
+ * Returns true, if the given method is considered "scriptable" - that means,
+ * it is allowed to use it in a script
+ */
+static bool memberIsScriptable(const QMetaMethod& m)
+{
+	return (m.attributes() & QMetaMethod::Scriptable);
+}
+
 
 QStringList PythonQtClassInfo::memberList()
 {
@@ -503,9 +529,10 @@ QStringList PythonQtClassInfo::memberList()
     bool skipQObj = !_isQObject;
     for (int i = skipQObj?QObject::staticMetaObject.methodCount():0; i < numMethods; i++) {
       QMetaMethod m = _meta->method(i);
-      if (((m.methodType() == QMetaMethod::Method ||
-        m.methodType() == QMetaMethod::Slot) && m.access() == QMetaMethod::Public)
-          || m.methodType()==QMetaMethod::Signal) {
+      if (memberIsScriptable(m) &&
+    	  (((m.methodType() == QMetaMethod::Method || m.methodType() == QMetaMethod::Slot) && m.access() == QMetaMethod::Public)
+          || m.methodType()==QMetaMethod::Signal))
+      {
         l << PythonQtUtils::methodName(m);
       }
     }
