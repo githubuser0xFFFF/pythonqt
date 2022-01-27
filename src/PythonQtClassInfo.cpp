@@ -567,7 +567,7 @@ QStringList PythonQtClassInfo::memberList()
     Q_FOREACH(PythonQtClassInfo* info, infos) {
       // If we have a superclass, then we know that we are not QObject - QObject
       // has no superClass and we do not want its decorators
-      if (info->metaObject()->superClass())
+      if (info->metaObject() && info->metaObject()->superClass())
       {
     	  info->listDecoratorSlotsFromDecoratorProvider(l, false);
       }
