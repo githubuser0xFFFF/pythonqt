@@ -2023,6 +2023,12 @@ PyObject* PythonQt::helpCalled(PythonQtClassInfo* info)
   }
 }
 
+
+int PythonQt::initFlags() const
+{
+	return _p->_initFlags;
+}
+
 void PythonQt::clearNotFoundCachedMembers()
 {
   Q_FOREACH(PythonQtClassInfo* info, _p->_knownClassInfos) {

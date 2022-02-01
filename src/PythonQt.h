@@ -177,7 +177,9 @@ public:
     RedirectStdOut = 1,   //!<< sets if the std out/err is redirected to pythonStdOut() and pythonStdErr() signals
     IgnoreSiteModule = 2, //!<< sets if Python should ignore the site module
     ExternalHelp = 4,     //!<< sets if help() calls on PythonQt modules are forwarded to the pythonHelpRequest() signal
-    PythonAlreadyInitialized = 8 //!<< sets that PythonQt should not can PyInitialize, since it is already done
+    PythonAlreadyInitialized = 8, //!<< sets that PythonQt should not can PyInitialize, since it is already done
+    ListOnlyScriptableMembers = 0x10, //!<< the PythonQtClassInfo::memberList() function lists only members that have the scriptable attribute set
+    ListOnlyScriptableProperties = 0x20,//!<< the PythonQtClassInfo::propertyList() function lists only properties that are scriptable
   };
 
   //! flags that tell PythonQt which operators to expect on the registered type
@@ -610,6 +612,8 @@ public:
   //! PythonQt::init().
   static void setEnableThreadSupport(bool flag);
 
+  //! Returns trhe init flags passed to PythonQt constructor
+  int initFlags() const;
   //@}
 
 Q_SIGNALS:

@@ -473,10 +473,16 @@ void PythonQtClassInfo::listDecoratorSlotsFromDecoratorProvider(QStringList& lis
 
 /**
  * Returns true, if the given method is considered "scriptable" - that means,
- * it is allowed to use it in a script
+ * it is allowed to use it in a script. Also returns true, if this
+ * check is disabled via PythonQt init flags.
  */
 static bool propertyIsScriptable(const QMetaObject* _meta, const QMetaProperty& p)
 {
+	if (!(PythonQt::self()->initFlags() & PythonQt::ListOnlyScriptableProperties))
+	{
+		return true;
+	}
+
 	if (!p.isScriptable())
 	{
 		return false;
@@ -535,6 +541,11 @@ QStringList PythonQtClassInfo::propertyList()
  */
 static bool memberIsScriptable(const QMetaMethod& m)
 {
+	if (!(PythonQt::self()->initFlags() & PythonQt::ListOnlyScriptableMembers))
+	{
+		return true;
+	}
+
 	return (m.attributes() & QMetaMethod::Scriptable);
 }
 
@@ -665,18 +676,21 @@ QString PythonQtClassInfo::help()
   h += QString("--- ") + QString(className()) + QString(" ---\n");
   
   if (_isQObject) {
-    h += "Properties:\n";
+    h += "\n--- Properties:\n";
   
     int i;
     int numProperties = _meta->propertyCount();
     for (i = 0; i < numProperties; i++) {
       QMetaProperty p = _meta->property(i);
-      h += QString(p.name()) + " (" + QString(p.typeName()) + " )\n";
+      if (propertyIsScriptable(_meta, p))
+      {
+        h += QString(p.name()) + " (" + QString(p.typeName()) + " )\n";
+      }
     }
   }
   
   if (constructors()) {
-    h += "Constructors:\n";
+    h += "\n--- Constructors:\n";
     PythonQtSlotInfo* constr = constructors();
     while (constr) {
       h += constr->fullSignature() + "\n";
@@ -684,7 +698,7 @@ QString PythonQtClassInfo::help()
     }
   }
 
-  h += "Slots:\n";
+  h += "\n--- Slots:\n";
   h += "QString help()\n";
   h += "QString className()\n";
 
@@ -692,8 +706,9 @@ QString PythonQtClassInfo::help()
     int numMethods = _meta->methodCount();
     for (int i = 0; i < numMethods; i++) {
       QMetaMethod m = _meta->method(i);
-      if ((m.methodType() == QMetaMethod::Method ||
-        m.methodType() == QMetaMethod::Slot) && m.access() == QMetaMethod::Public) {
+      if (memberIsScriptable(m)
+      && (m.methodType() == QMetaMethod::Method || m.methodType() == QMetaMethod::Slot)
+      && m.access() == QMetaMethod::Public) {
         PythonQtSlotInfo slot(this, m, i);
         h += slot.fullSignature()+ "\n";
       }
@@ -704,7 +719,7 @@ QString PythonQtClassInfo::help()
   // maybe we can reuse memberlist()?
   
   if (_meta && _meta->enumeratorCount()) {
-    h += "Enums:\n";
+    h += "\n--- Enums:\n";
     for (int i = 0; i<_meta->enumeratorCount(); i++) {
       QMetaEnum e = _meta->enumerator(i);
       h += QString(e.name()) + " {";
@@ -719,7 +734,7 @@ QString PythonQtClassInfo::help()
   if (_isQObject && _meta) {
     int numMethods = _meta->methodCount();
     if (numMethods>0) {
-      h += "Signals:\n";
+      h += "\n--- Signals:\n";
       for (int i = 0; i < numMethods; i++) {
         QMetaMethod m = _meta->method(i);
         if (m.methodType() == QMetaMethod::Signal) {
