@@ -1718,7 +1718,6 @@ void PythonQt::setModuleImportPath(PyObject* module, const QStringList& paths)
 void PythonQt::stdOutRedirectCB(const QString& str)
 {
   if (!PythonQt::self()) {
-    std::cout << QStringToPythonConstCharPointer(str) << std::endl;
     return;
   }
   Q_EMIT PythonQt::self()->pythonStdOut(str);

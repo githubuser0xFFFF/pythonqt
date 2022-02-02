@@ -85,7 +85,6 @@ void PythonQtScriptingConsole::stdOut(const QString& s)
   int idx;
   while ((idx = _stdOut.indexOf('\n'))!=-1) {
     consoleMessage(_stdOut.left(idx));
-    std::cout << QStringToPythonConstCharPointer(_stdOut.left(idx)) << std::endl;
     _stdOut = _stdOut.mid(idx+1);
   }
 }
