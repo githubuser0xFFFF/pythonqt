@@ -951,9 +951,18 @@ AbstractMetaEnum *AbstractMetaBuilder::traverseEnum(EnumModelItem enum_item, Abs
     }
 
     QString qualified_name = enum_item->qualifiedName().join("::");
+    QString enum_name = enum_item->name();
+
+    bool hasQEnumDeclaration = enumsDeclarations.contains(qualified_name)
+                            || enumsDeclarations.contains(enum_name);
 
     TypeEntry *type_entry = TypeDatabase::instance()->findType(qualified_name);
-    QString enum_name = enum_item->name();
+    if (hasQEnumDeclaration && !type_entry) {
+        // automatically add enum type declared as Q_ENUM
+        const auto& names = enum_item->qualifiedName();
+        type_entry = new EnumTypeEntry(QStringList(names.mid(0, names.size()-1)).join("::"), names.last());
+        TypeDatabase::instance()->addType(type_entry);
+    }
 
     QString class_name;
     if (m_current_class)
@@ -969,12 +978,11 @@ AbstractMetaEnum *AbstractMetaBuilder::traverseEnum(EnumModelItem enum_item, Abs
         ReportHandler::warning(QString("enum '%1' does not have a type entry or is not an enum")
                                .arg(qualified_name));
         m_rejected_enums.insert(qualified_name, NotInTypeSystem);
-       return 0;
+        return 0;
     }
 
     AbstractMetaEnum *meta_enum = createMetaEnum();
-    if (   enumsDeclarations.contains(qualified_name)
-        || enumsDeclarations.contains(enum_name)) {
+    if (hasQEnumDeclaration) {
         meta_enum->setHasQEnumsDeclaration(true);
     }
 
@@ -1122,11 +1130,11 @@ AbstractMetaClass *AbstractMetaBuilder::traverseClass(ClassModelItem class_item)
     meta_class->setTemplateArguments(template_args);
     meta_class->setHasActualDeclaration(class_item->hasActualDeclaration());
 
-    parseQ_Property(meta_class, class_item->propertyDeclarations());
-
-    traverseFunctions(model_dynamic_cast<ScopeModelItem>(class_item), meta_class);
     traverseEnums(model_dynamic_cast<ScopeModelItem>(class_item), meta_class, class_item->enumsDeclarations());
+    traverseFunctions(model_dynamic_cast<ScopeModelItem>(class_item), meta_class);
     traverseFields(model_dynamic_cast<ScopeModelItem>(class_item), meta_class);
+
+    parseQ_Property(meta_class, class_item->propertyDeclarations());
 
     // Inner classes
     {
