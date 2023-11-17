@@ -44,9 +44,9 @@ PYTHONQT_GENERATED_PATH = $$PWD/../generated_cpp
       }
     }
 
-    !exists($$PYTHONQT_GENERATED_PATH) {
-      error("No generated sources exist for Qt$${QT_VERSION}")
-    }
+    #!exists($$PYTHONQT_GENERATED_PATH) {
+    #  error("No generated sources exist for Qt$${QT_VERSION}")
+    #}
   }
 }
 

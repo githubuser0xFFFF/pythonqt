@@ -738,8 +738,3 @@ void PythonQtMetaCallDelegate::qt_metacall(QObject* obj, void* _slot, void* args
 		MetacallException = std::current_exception();
 	}
 }
-
-bool PythonQtSlotInfo::getGlobalShouldAllowThreads()
-{
-  return _globalShouldAllowThreads;
-}
