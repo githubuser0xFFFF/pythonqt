@@ -42,10 +42,7 @@
 #ifndef GENERATOR_H
 #define GENERATOR_H
 
-#include "metajava.h"
-#include "typesystem.h"
-
-#include "codemodel.h"
+#include "abstractmetalang.h"
 
 #include <QObject>
 #include <QFile>
@@ -54,10 +51,10 @@ class Generator : public QObject
 {
     Q_OBJECT
 
-    Q_PROPERTY(QString outputDirectory READ outputDirectory WRITE setOutputDirectory);
+    Q_PROPERTY(QString outputDirectory READ outputDirectory WRITE setOutputDirectory)
 
 public:
-    enum Option {
+    enum Option:uint32_t {
         NoOption                 = 0x00000000,
         BoxedPrimitive           = 0x00000001,
         ExcludeConst             = 0x00000002,
@@ -120,6 +117,8 @@ public:
         { return m_qmetatype_declared_typenames; }
 
 protected:
+    
+
     void verifyDirectoryFor(const QFile &file);
 
     AbstractMetaClassList m_classes;

@@ -39,6 +39,8 @@
 **
 ****************************************************************************/
 
+#include <algorithm> // for std::stable_sort
+
 #include "abstractmetalang.h"
 #include "reporthandler.h"
 
@@ -53,7 +55,7 @@ AbstractMetaType *AbstractMetaType::copy() const
     cpy->setConstant(isConstant());
     cpy->setReference(isReference());
     cpy->setIndirections(indirections());
-	cpy->setInstantiations(instantiations());
+    cpy->setInstantiations(instantiations());
     cpy->setArrayElementCount(arrayElementCount());
     cpy->setOriginalTypeDescription(originalTypeDescription());
     cpy->setOriginalTemplateType(originalTemplateType() ? originalTemplateType()->copy() : 0);
@@ -313,6 +315,8 @@ AbstractMetaFunction *AbstractMetaFunction::copy() const
     if (type())
         cpy->setType(type()->copy());
     cpy->setConstant(isConstant());
+    cpy->setConstexpr(isConstexpr());
+    cpy->setAuto(isAuto());
     cpy->setException(exception());
     cpy->setOriginalAttributes(originalAttributes());
 
@@ -364,6 +368,8 @@ QString AbstractMetaFunction::signature() const
 
     if (isConstant())
         s += " const";
+    if (isConstexpr())
+        s += " constexpr";
 
     return s;
 }
@@ -655,6 +661,8 @@ QString AbstractMetaFunction::minimalSignature() const
     minimalSignature += ")";
     if (isConstant())
         minimalSignature += "const";
+    if (isConstexpr())
+        minimalSignature += "constexpr";
 
     minimalSignature = TypeSystem::normalizedSignature(minimalSignature.toLocal8Bit().constData());
     m_cached_minimal_signature = minimalSignature;
@@ -840,17 +848,17 @@ AbstractMetaFunctionList AbstractMetaClass::queryFunctionsByName(const QString &
 
 QString AbstractMetaClass::getDefaultNonZeroFunction() const
 {
-  foreach(const AbstractMetaFunction* fun, queryFunctionsByName("isEmpty")) {
+  for (const AbstractMetaFunction* fun :  queryFunctionsByName("isEmpty")) {
     if (fun->actualMinimumArgumentCount()==0 && fun->isPublic()) {
       return "isEmpty";
     }
   }
-  foreach(const AbstractMetaFunction* fun, queryFunctionsByName("isValid")) {
+  for (const AbstractMetaFunction* fun :  queryFunctionsByName("isValid")) {
     if (fun->actualMinimumArgumentCount() == 0 && fun->isPublic()) {
       return "isValid";
     }
   }
-  foreach(const AbstractMetaFunction* fun, queryFunctionsByName("isNull")) {
+  for (const AbstractMetaFunction* fun :  queryFunctionsByName("isNull")) {
     if (fun->actualMinimumArgumentCount() == 0 && fun->isPublic()) {
       return "isNull";
     }
@@ -972,7 +980,7 @@ AbstractMetaFunctionList AbstractMetaClass::virtualOverrideFunctions() const
 
 void AbstractMetaClass::sortFunctions()
 {
-    qSort(m_functions.begin(), m_functions.end(), function_sorter);
+    std::sort(m_functions.begin(), m_functions.end(), function_sorter);
 }
 
 void AbstractMetaClass::setFunctions(const AbstractMetaFunctionList &functions)
@@ -1090,7 +1098,7 @@ void AbstractMetaClass::addFunction(AbstractMetaFunction *function)
     if (!function->isDestructor()) {
         m_functions << function;
         // seems like this is not needed and takes a lot of performance
-        //qSort(m_functions.begin(), m_functions.end(), function_sorter);
+        //std::sort(m_functions.begin(), m_functions.end(), function_sorter);
     }
 
 
@@ -1173,19 +1181,32 @@ QPropertySpec *AbstractMetaClass::propertySpecForReset(const QString &name) cons
     return 0;
 }
 
+bool AbstractMetaClass::hasVirtualDestructor() const
+{
+    if (m_has_virtual_destructor) {
+        return true;
+    }
+    else {
+        // check all super classes
+        for (int i = 0; i < m_super_classes.size(); ++i) {
+            AbstractMetaClass* super_class = m_super_classes.at(i);
+            if (super_class->hasVirtualDestructor()) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 
 
 static bool functions_contains(const AbstractMetaFunctionList &l, const AbstractMetaFunction *func)
 {
     foreach (const AbstractMetaFunction *f, l) {
-		if ((f->compareTo(func) & AbstractMetaFunction::PrettySimilar) == AbstractMetaFunction::PrettySimilar)
+                if ((f->compareTo(func) & AbstractMetaFunction::PrettySimilar) == AbstractMetaFunction::PrettySimilar)
             return true;
     }
     return false;
-}
-
-AbstractMetaField::AbstractMetaField() : m_getter(0), m_setter(0), m_class(0)
-{
 }
 
 AbstractMetaField::~AbstractMetaField()
@@ -1205,13 +1226,13 @@ AbstractMetaField *AbstractMetaField::copy() const
 
     return returned;
 }
-
+/* UNUSED
 static QString upCaseFirst(const QString &str) {
     Q_ASSERT(!str.isEmpty());
     QString s = str;
     s[0] = s.at(0).toUpper();
     return s;
-}
+} */
 
 static AbstractMetaFunction *createXetter(const AbstractMetaField *g, const QString &name, uint type) {
     AbstractMetaFunction *f = new AbstractMetaFunction;
@@ -1623,20 +1644,21 @@ void AbstractMetaClass::fixFunctions()
 
     AbstractMetaClass *super_class = baseClass();
     AbstractMetaFunctionList funcs = functions();
+    AbstractMetaClassList interfaceClasses = interfaces();
 
 //     printf("fix functions for %s\n", qPrintable(name()));
 
     if (super_class != 0)
         super_class->fixFunctions();
     int iface_idx = 0;
-    while (super_class || iface_idx < interfaces().size()) {
-//         printf(" - base: %s\n", qPrintable(super_class->name()));
+    while (super_class || iface_idx < interfaceClasses.size()) {
 
         // Since we always traverse the complete hierarchy we are only
         // interested in what each super class implements, not what
         // we may have propagated from their base classes again.
         AbstractMetaFunctionList super_funcs;
         if (super_class) {
+//             printf(" - base: %s\n", qPrintable(super_class->name()));
 
             // Super classes can never be final
             if (super_class->isFinalInTargetLang()) {
@@ -1645,7 +1667,10 @@ void AbstractMetaClass::fixFunctions()
             }
             super_funcs = super_class->queryFunctions(AbstractMetaClass::ClassImplements);
         } else {
-            super_funcs = interfaces().at(iface_idx)->queryFunctions(AbstractMetaClass::NormalFunctions);
+            AbstractMetaClass *iface_class = interfaceClasses.at(iface_idx);
+//             printf(" - iface: %s\n", qPrintable(iface_class->name()));
+            iface_class->fixFunctions();
+            super_funcs = iface_class->queryFunctions(AbstractMetaClass::NormalFunctions);
         }
 
         QSet<AbstractMetaFunction *> funcs_to_add;
@@ -1802,11 +1827,15 @@ void AbstractMetaClass::fixFunctions()
         foreach (AbstractMetaFunction *f, funcs_to_add)
             funcs << f->copy();
 
-        if (super_class)
+        if (super_class) {
+            interfaceClasses += super_class->interfaces();
             super_class = super_class->baseClass();
-        else
+        } else {
             iface_idx++;
+        }
     }
+
+//     printf("end fix functions for %s\n", qPrintable(name()));
 
     bool hasPrivateConstructors = false;
     bool hasPublicConstructors = false;
@@ -1993,4 +2022,10 @@ AbstractMetaClass *AbstractMetaClassList::findClass(const QString &name) const
     }
 
     return 0;
+}
+
+
+void AbstractMetaClassList::sort(void)
+{
+   std::stable_sort(begin(), end(), AbstractMetaClass::less_than);
 }

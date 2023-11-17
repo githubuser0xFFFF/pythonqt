@@ -3,6 +3,8 @@
 *.lo
 *.o
 *.obj
+*.pdb
+*.cbt
 
 # Precompiled Headers
 *.gch
@@ -43,6 +45,8 @@ ui_*.h
 *.jsc
 Makefile*
 *build-*
+*resource.rc
+*.FileListAbsolute.txt
 
 # CMake
 CMakeLists.txt.user
@@ -82,9 +86,31 @@ Thumbs.db
 # Visual Studio Code
 .vscode/*
 
+*.tlog
+
+
+# JetBrains tools
+.idea/*
+
 # Doxygen
 doxygen/html/*
 doxygen.log
 
 # Backup files
 *.bak
+generated_cpp
+generator/.vs
+*.log
+*.sln
+*.vcxproj
+*.filters
+*.user
+*.stash
+*.tmp
+generate.bat
+generator/release
+
+/.vs/
+*/.vs
+*/debug/*
+*/release/*

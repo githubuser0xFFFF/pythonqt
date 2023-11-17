@@ -73,10 +73,10 @@ PythonQtMethodInfo::PythonQtMethodInfo(const QMetaMethod& meta, PythonQtClassInf
 PythonQtMethodInfo::PythonQtMethodInfo(const QByteArray& typeName, const QList<QByteArray>& args)
 {
   ParameterInfo type;
-  fillParameterInfo(type, typeName, NULL);
+  fillParameterInfo(type, typeName, nullptr);
   _parameters.append(type);
   Q_FOREACH (const QByteArray& name, args) {
-    fillParameterInfo(type, name, NULL);
+    fillParameterInfo(type, name, nullptr);
     _parameters.append(type);
   }
   setupAllowThreads();
@@ -85,7 +85,7 @@ PythonQtMethodInfo::PythonQtMethodInfo(const QByteArray& typeName, const QList<Q
 void PythonQtMethodInfo::setupAllowThreads()
 {
   bool allowThreads = true;
-  for (const ParameterInfo& info : _parameters) {
+  for (const ParameterInfo& info : qAsConst(_parameters)) {
     if (info.name == "PyObject" || info.name == "PythonQtObjectPtr" ||
       info.innerName == "PyObject" || info.innerName == "PythonQtObjectPtr") {
       allowThreads = false;
@@ -135,7 +135,7 @@ void PythonQtMethodInfo::fillParameterInfo(ParameterInfo& type, const QByteArray
 {
   QByteArray name = orgName;
 
-  type.enumWrapper = NULL;
+  type.enumWrapper = nullptr;
   type.innerNamePointerCount = 0;
   type.isQList = false;
   type.passOwnershipToCPP = false;
@@ -318,15 +318,19 @@ int PythonQtMethodInfo::nameToType(const char* name)
       _parameterTypeDict.insert("qgl_GLsizeiptr", QMetaType::LongLong);
       _parameterTypeDict.insert("size_t", QMetaType::ULongLong);
       _parameterTypeDict.insert("qintptr", QMetaType::LongLong);
+      _parameterTypeDict.insert("qptrdiff", QMetaType::LongLong);
       _parameterTypeDict.insert("quintptr", QMetaType::ULongLong);
       _parameterTypeDict.insert("WId", QMetaType::ULongLong);
+      _parameterTypeDict.insert("qsizetype", QMetaType::LongLong);
     } else {
       _parameterTypeDict.insert("qgl_GLintptr", QMetaType::Int);
       _parameterTypeDict.insert("qgl_GLsizeiptr", QMetaType::Int);
       _parameterTypeDict.insert("size_t", QMetaType::UInt);
       _parameterTypeDict.insert("qintptr", QMetaType::Int);
+      _parameterTypeDict.insert("qptrdiff", QMetaType::Int);
       _parameterTypeDict.insert("quintptr", QMetaType::UInt);
       _parameterTypeDict.insert("WId", QMetaType::UInt);
+      _parameterTypeDict.insert("qsizetype", QMetaType::Int);
     }
 
 #ifdef PYTHONQT_SUPPORT_ML_TYPES
@@ -372,7 +376,10 @@ int PythonQtMethodInfo::nameToType(const char* name)
     _parameterTypeDict.insert("QLineF", QMetaType::QLineF);
     _parameterTypeDict.insert("QPoint", QMetaType::QPoint);
     _parameterTypeDict.insert("QPointF", QMetaType::QPointF);
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
     _parameterTypeDict.insert("QRegExp", QMetaType::QRegExp);
+#endif
+    _parameterTypeDict.insert("QRegularExpression", QMetaType::QRegularExpression);
     _parameterTypeDict.insert("QFont", QMetaType::QFont);
     _parameterTypeDict.insert("QPixmap", QMetaType::QPixmap);
     _parameterTypeDict.insert("QBrush", QMetaType::QBrush);
@@ -387,8 +394,12 @@ int PythonQtMethodInfo::nameToType(const char* name)
     _parameterTypeDict.insert("QKeySequence", QMetaType::QKeySequence);
     _parameterTypeDict.insert("QPen", QMetaType::QPen);
     _parameterTypeDict.insert("QTextLength", QMetaType::QTextLength);
-    _parameterTypeDict.insert("QTextFormat", QMetaType::QTextFormat);
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
     _parameterTypeDict.insert("QMatrix", QMetaType::QMatrix);
+#endif
+    _parameterTypeDict.insert("QMatrix4x4", QMetaType::QMatrix4x4);
+    _parameterTypeDict.insert("QTransform", QMetaType::QTransform);
+    _parameterTypeDict.insert("QTextFormat", QMetaType::QTextFormat);
     _parameterTypeDict.insert("QVariant", PythonQtMethodInfo::Variant);
     // own special types... (none so far, could be e.g. ObjectList
   }
@@ -653,4 +664,9 @@ void PythonQtSlotInfo::invokeQtMethod(QObject* obj, PythonQtSlotInfo* slot, void
 void PythonQtSlotInfo::setGlobalShouldAllowThreads(bool flag)
 {
   _globalShouldAllowThreads = flag;
+}
+
+bool PythonQtSlotInfo::getGlobalShouldAllowThreads()
+{
+  return _globalShouldAllowThreads;
 }

@@ -62,7 +62,7 @@ public:
 
     void initPP(pp &proc)
     {
-        foreach(QString path, includePaths)
+        for (QString path :  includePaths)
             proc.push_include_path(path.toStdString());
     }
 };
@@ -143,7 +143,7 @@ QList<Preprocessor::MacroItem> Preprocessor::macros() const
             item.parameters += QString::fromLatin1(m->formals[i]->begin(),
                     m->formals[i]->size());
         }
-        item.isFunctionLike = m->function_like;
+        item.isFunctionLike = m->is.function_like;
 
 #ifdef PP_WITH_MACRO_POSITION
         item.fileName = QString::fromLatin1(m->file->begin(), m->file->size());

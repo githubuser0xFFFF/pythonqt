@@ -45,7 +45,6 @@
 #include "PythonQtConversion.h"
 #include <QMetaObject>
 #include <QMetaMethod>
-#include "funcobject.h"
 
 // use -2 to signal that the variable is uninitialized
 int PythonQtSignalReceiver::_destroyedSignal1Id = -2;
@@ -54,7 +53,10 @@ int PythonQtSignalReceiver::_destroyedSignal2Id = -2;
 void PythonQtSignalTarget::call(void **arguments) const {
   PYTHONQT_GIL_SCOPE
   PyObject* result = call(_callable, methodInfo(), arguments);
-  Py_XDECREF(result);
+  if (result) {
+    PythonQt::priv()->checkAndRunCoroutine(result);
+    Py_DECREF(result);
+  }
 }
 
 PyObject* PythonQtSignalTarget::call(PyObject* callable, const PythonQtMethodInfo* methodInfos, void **arguments, bool skipFirstArgumentOfMethodInfo)
@@ -98,9 +100,9 @@ PyObject* PythonQtSignalTarget::call(PyObject* callable, const PythonQtMethodInf
     }
   }
 
-  PythonQtObjectPtr pargs;
+  PyObject* pargs = nullptr;
   if (count>1) {
-    pargs.setNewRef(PyTuple_New(count-1));
+    pargs = PyTuple_New(count-1);
   }
   bool err = false;
   // transform Qt values to Python
@@ -122,7 +124,7 @@ PyObject* PythonQtSignalTarget::call(PyObject* callable, const PythonQtMethodInf
     }
   }
 
-  PyObject* result = NULL;
+  PyObject* result = nullptr;
   if (!err) {
     PyErr_Clear();
     result = PyObject_CallObject(callable, pargs);
@@ -131,6 +133,10 @@ PyObject* PythonQtSignalTarget::call(PyObject* callable, const PythonQtMethodInf
     } else {
       PythonQt::self()->handleError();
     }
+  }
+  if (pargs) {
+    // free the arguments again
+    Py_DECREF(pargs);
   }
 
   return result;
@@ -190,7 +196,7 @@ bool PythonQtSignalReceiver::addSignalHandler(const char* signal, PyObject* call
     PythonQtSignalTarget t(sigId, signalInfo, _slotCount, callable);
     _targets.append(t);
     // now connect to ourselves with the new slot id
-    QMetaObject::connect(_obj, sigId, this, _slotCount, Qt::AutoConnection, 0);
+    QMetaObject::connect(_obj, sigId, this, _slotCount, Qt::AutoConnection, nullptr);
 
     _slotCount++;
     flag = true;
@@ -232,7 +238,7 @@ bool PythonQtSignalReceiver::removeSignalHandler(const char* signal, PyObject* c
       }
     }
   }
-  if ((foundCount>0) && (sigId == _destroyedSignal1Id) || (sigId == _destroyedSignal2Id)) {
+  if ((foundCount>0) && ((sigId == _destroyedSignal1Id) || (sigId == _destroyedSignal2Id))) {
     _destroyedSignalCount -= foundCount;
     if (_destroyedSignalCount==0) {
       // make ourself child of QObject again, to get deleted when the object gets deleted
@@ -260,7 +266,7 @@ int PythonQtSignalReceiver::qt_metacall(QMetaObject::Call c, int id, void **argu
   }
 
   bool shouldDelete = false;
-  for(const PythonQtSignalTarget& t : _targets) {
+  for(const PythonQtSignalTarget& t : qAsConst(_targets)) {
     if (t.slotId() == id) {
       const int sigId = t.signalId();
       t.call(arguments);

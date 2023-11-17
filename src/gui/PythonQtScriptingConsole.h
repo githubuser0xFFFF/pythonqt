@@ -55,16 +55,16 @@ class PYTHONQT_EXPORT PythonQtScriptingConsole : public QTextEdit
   Q_OBJECT
 
 public:
-  PythonQtScriptingConsole(QWidget* parent, const PythonQtObjectPtr& context, Qt::WindowFlags i = 0);
+  PythonQtScriptingConsole(QWidget* parent, const PythonQtObjectPtr& context, Qt::WindowFlags i = Qt::WindowFlags());
 
-  ~PythonQtScriptingConsole();
+  ~PythonQtScriptingConsole() override;
 
 public Q_SLOTS:
   //! execute current line
   void executeLine(bool storeOnly);
 
   //! derived key press event
-  void keyPressEvent (QKeyEvent * e);
+  void keyPressEvent (QKeyEvent * e) override;
 
   //! output from console
   void consoleMessage(const QString & message);

@@ -140,7 +140,7 @@ public:
   inline std::size_t cursor() const
   { return index; }
 
-  inline void rewind(int i)
+  inline void rewind(std::size_t i)
   { index = i; }
 
   void resize(std::size_t size)
@@ -168,11 +168,11 @@ public:
   inline std::size_t matchingBrace(std::size_t i) const
   { return tokens[i].extra.right_brace; }
 
-  inline Token &operator[](int index)
-  { return tokens[index]; }
+  inline Token &operator[](std::size_t i)
+  { return tokens[i]; }
 
-  inline const Token &token(int index) const
-  { return tokens[index]; }
+  inline const Token &token(std::size_t i) const
+  { return tokens[i]; }
 
 private:
   Token *tokens;

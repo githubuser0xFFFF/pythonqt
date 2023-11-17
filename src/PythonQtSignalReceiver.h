@@ -57,7 +57,7 @@ class PYTHONQT_EXPORT PythonQtSignalTarget {
 public:
   PythonQtSignalTarget() {
     _signalId = -1;
-    _methodInfo = NULL;
+    _methodInfo = nullptr;
     _slotId = -1;
   }
 
@@ -94,7 +94,7 @@ private:
   int       _signalId;
   int       _slotId;
   const PythonQtMethodInfo* _methodInfo;
-  PythonQtObjectPtr _callable;
+  PythonQtSafeObjectPtr _callable;
 };
 
 //! base class for signal receivers
@@ -113,16 +113,16 @@ class PythonQtSignalReceiver : public PythonQtSignalReceiverBase {
 
 public:
   PythonQtSignalReceiver(QObject* obj);
-  ~PythonQtSignalReceiver();
+  ~PythonQtSignalReceiver() override;
 
   //! add a signal handler
   bool addSignalHandler(const char* signal, PyObject* callable);
 
   //! remove a signal handler for given callable (or all callables on that signal if callable is NULL)
-  bool removeSignalHandler(const char* signal, PyObject* callable = NULL);
+  bool removeSignalHandler(const char* signal, PyObject* callable = nullptr);
 
   //! we implement this method to simulate a number of slots that match the ids in _targets
-  virtual int qt_metacall(QMetaObject::Call c, int id, void **arguments);
+  int qt_metacall(QMetaObject::Call c, int id, void **arguments) override;
 
 private:
   //! get the index of the signal

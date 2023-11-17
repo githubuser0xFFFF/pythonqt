@@ -49,6 +49,23 @@
 #include <memory>
 
 #include <QtXml>
+#include <qcompilerdetection.h> // Q_FALLTHROUGH
+
+/* This file needs to be rewritten as documented here:
+ *
+ * See: https://doc.qt.io/qt-6/xml-changes-qt6.html
+ *
+ * The rewrite may be backward compatible to Qt4.3 APIs because the base
+ * facilites (QXmlStreamReader) used to relace the 'SAX' parser were apparently
+ * available then.  Use of Xml5Compat is a work round until such a rewrite has
+ * been done.
+ */
+#if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
+#   if defined(__GNUC__)
+#       pragma GCC warning "Qt6: implement Qt6 compatible XML reading"
+#   endif
+#   include <QtCore5Compat/QXmlDefaultHandler>
+#endif
 
 QString strings_Object = QLatin1String("Object");
 QString strings_String = QLatin1String("String");
@@ -445,7 +462,7 @@ bool Handler::startElement(const QString &, const QString &n,
         return importFileElement(atts);
     }
 
-    std::auto_ptr<StackElement> element(new StackElement(current));
+    std::unique_ptr<StackElement> element(new StackElement(current));
 
     if (!tagNames.contains(tagName)) {
         m_error = QString("Unknown tag name: '%1'").arg(tagName);
@@ -482,12 +499,12 @@ bool Handler::startElement(const QString &, const QString &n,
         case StackElement::ValueTypeEntry:
             attributes["force-abstract"] = QString("no");
             attributes["deprecated"] = QString("no");
-            // fall throooough
+            Q_FALLTHROUGH();
         case StackElement::InterfaceTypeEntry:
             attributes["default-superclass"] = m_defaultSuperclass;
             attributes["polymorphic-id-expression"] = QString();
             attributes["delete-in-main-thread"] = QString("no");
-            // fall through
+            Q_FALLTHROUGH();
         case StackElement::NamespaceTypeEntry:
             attributes["java-name"] = QString();
             attributes["package"] = m_defaultPackage;
@@ -661,7 +678,7 @@ bool Handler::startElement(const QString &, const QString &n,
                     element->type == StackElement::ValueTypeEntry ||
                     element->type == StackElement::ObjectTypeEntry) {
                     if (convertBoolean(attributes["delete-in-main-thread"], "delete-in-main-thread", false))
-			            ctype->setTypeFlags(ctype->typeFlags() | ComplexTypeEntry::DeleteInMainThread);
+                        ctype->setTypeFlags(ctype->typeFlags() | ComplexTypeEntry::DeleteInMainThread);
                 }
 
                 QString targetType = attributes["target-type"];
@@ -734,7 +751,7 @@ bool Handler::startElement(const QString &, const QString &n,
             break;
         case StackElement::ModifyArgument:
             attributes["index"] = QString();
-	        attributes["replace-value"] = QString();
+            attributes["replace-value"] = QString();
             attributes["invalidate-after-use"] = QString("no");
             break;
         case StackElement::ModifyField:
@@ -840,9 +857,7 @@ bool Handler::startElement(const QString &, const QString &n,
             }
             QString name = attributes["name"];
 
-            bool added = false;
             if (!name.isEmpty()) {
-                added = true;
                 m_current_enum->addEnumValueRejection(name);
             }
 
@@ -910,18 +925,18 @@ bool Handler::startElement(const QString &, const QString &n,
                     return false;
                 }
 
-		        QString replace_value = attributes["replace-value"];
+                QString replace_value = attributes["replace-value"];
 
-		        if (!replace_value.isEmpty() && idx != 0) {
-		            m_error = QString("replace-value is only supported for return values (index=0).");
-		            return false;
-		        }
+                if (!replace_value.isEmpty() && idx != 0) {
+                    m_error = QString("replace-value is only supported for return values (index=0).");
+                    return false;
+                }
 
-		        ArgumentModification argumentModification = ArgumentModification(idx);
-		        argumentModification.replace_value = replace_value;
-                argumentModification.reset_after_use = convertBoolean(attributes["invalidate-after-use"], "invalidate-after-use", false);
-                m_function_mods.last().argument_mods.append(argumentModification);
-            }
+                ArgumentModification argumentModification = ArgumentModification(idx);
+                argumentModification.replace_value = replace_value;
+                    argumentModification.reset_after_use = convertBoolean(attributes["invalidate-after-use"], "invalidate-after-use", false);
+                    m_function_mods.last().argument_mods.append(argumentModification);
+                }
             break;
         case StackElement::NoNullPointers:
             {
@@ -1487,6 +1502,7 @@ TypeDatabase::TypeDatabase() : m_suppressWarnings(true)
 bool TypeDatabase::parseFile(const QString &filename, bool generate)
 {
     QFile file(filename);
+
     Q_ASSERT(file.exists());
     QXmlInputSource source(&file);
 
@@ -1837,7 +1853,7 @@ QString TemplateInstance::expandCode() const{
     TemplateEntry *templateEntry = TypeDatabase::instance()->findTemplate(m_name);
     if(templateEntry){
         QString res = templateEntry->code();
-        foreach(QString key, replaceRules.keys()){
+        for (QString key :  replaceRules.keys()){
             res.replace(key, replaceRules[key]);
         }
         return "// TEMPLATE - " + m_name + " - START" + res + "// TEMPLATE - " + m_name + " - END";
@@ -1851,7 +1867,7 @@ QString TemplateInstance::expandCode() const{
 
 QString CodeSnipAbstract::code() const{
     QString res;
-    foreach(CodeSnipFragment *codeFrag, codeList){
+    for (CodeSnipFragment *codeFrag :  codeList){
         res.append(codeFrag->code());
     }
     return res;

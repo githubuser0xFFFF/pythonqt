@@ -124,41 +124,34 @@ private:
   void operator = (const CodeModel &other);
 };
 
-class TypeInfo
+struct TypeInfo
 {
-public:
-  TypeInfo(const TypeInfo &other)
-    : flags(other.flags),
-      m_qualifiedName(other.m_qualifiedName),
-      m_arrayElements(other.m_arrayElements),
-      m_arguments(other.m_arguments),
-      m_rvalue_reference(other.m_rvalue_reference)
-  {
-  }
-
-  TypeInfo():
-    flags (0), m_rvalue_reference(false) {}
-
   QStringList qualifiedName() const { return m_qualifiedName; }
   void setQualifiedName(const QStringList &qualified_name) { m_qualifiedName = qualified_name; }
 
-  bool isConstant() const { return m_constant; }
-  void setConstant(bool is) { m_constant = is; }
+  bool isConstant() const { return m_flags.m_constant; }
+  void setConstant(bool is) { m_flags.m_constant = is; }
 
-  bool isVolatile() const { return m_volatile; }
-  void setVolatile(bool is) { m_volatile = is; }
+  bool isConstexpr() const { return m_flags.m_constexpr; }
+  void setConstexpr(bool is) { m_flags.m_constexpr = is; }
 
-  bool isReference() const { return m_reference; }
-  void setReference(bool is) { m_reference = is; }
+  bool isVolatile() const { return m_flags.m_volatile; }
+  void setVolatile(bool is) { m_flags.m_volatile = is; }
+
+  bool isMutable() const { return m_flags.m_mutable; }
+  void setMutable(bool is) { m_flags.m_mutable = is; }
+
+  bool isReference() const { return m_flags.m_reference; }
+  void setReference(bool is) { m_flags.m_reference = is; }
 
   bool isRvalueReference() const { return m_rvalue_reference; }
   void setRvalueReference(bool is) { m_rvalue_reference = is; }
 
-  int indirections() const { return m_indirections; }
-  void setIndirections(int indirections) { m_indirections = indirections; }
+  int indirections() const { return m_flags.m_indirections; }
+  void setIndirections(int indirections) { m_flags.m_indirections = indirections; }
 
-  bool isFunctionPointer() const { return m_functionPointer; }
-  void setFunctionPointer(bool is) { m_functionPointer = is; }
+  bool isFunctionPointer() const { return m_flags.m_functionPointer; }
+  void setFunctionPointer(bool is) { m_flags.m_functionPointer = is; }
 
   QStringList arrayElements() const { return m_arrayElements; }
   void setArrayElements(const QStringList &arrayElements) { m_arrayElements = arrayElements; }
@@ -167,8 +160,8 @@ public:
   void setArguments(const QList<TypeInfo> &arguments);
   void addArgument(const TypeInfo &arg) { m_arguments.append(arg); }
 
-  bool operator==(const TypeInfo &other);
-  bool operator!=(const TypeInfo &other) { return !(*this==other); }
+  bool operator==(const TypeInfo &other) const;
+  bool operator!=(const TypeInfo &other) const { return !(*this==other); }
 
   // ### arrays and templates??
 
@@ -178,25 +171,30 @@ public:
   static TypeInfo resolveType (TypeInfo const &__type, CodeModelItem __scope);
 
 private:
-  union
-  {
-    uint flags;
-
-    struct
-    {
-      uint m_constant: 1;
-      uint m_volatile: 1;
-      uint m_reference: 1;
-      uint m_functionPointer: 1;
-      uint m_indirections: 6;
-      uint m_padding: 22;
-    };
-  };
+  struct TypeInfo_flags {
+        uint m_constant: 1;
+        uint m_constexpr: 1;
+        uint m_volatile: 1;
+        uint m_mutable: 1;
+        uint m_reference: 1;
+        uint m_functionPointer: 1;
+        uint m_indirections: 6;
+        inline bool equals(TypeInfo_flags other) const {
+         /* m_auto and m_friend don't matter here */
+         return m_constant == other.m_constant
+             && m_constexpr == other.m_constexpr
+             && m_volatile == other.m_volatile
+             && m_mutable == other.m_mutable
+             && m_reference == other.m_reference
+             && m_functionPointer == other.m_functionPointer
+             && m_indirections == other.m_indirections;
+        }
+  } m_flags {0, 0, 0, 0, 0, 0, 0};
 
   QStringList m_qualifiedName;
   QStringList m_arrayElements;
   QList<TypeInfo> m_arguments;
-  bool m_rvalue_reference;
+  bool m_rvalue_reference { false };
 };
 
 class _CodeModelItem: public QSharedData
@@ -368,6 +366,10 @@ public:
   void addPropertyDeclaration(const QString &propertyDeclaration);
   QStringList propertyDeclarations() const { return _M_propertyDeclarations; }
 
+  void setHasActualDeclaration(bool flag) { _M_hasActualDeclaration = flag; }
+  bool hasActualDeclaration() const { return _M_hasActualDeclaration; }
+
+
 protected:
   _ClassModelItem(CodeModel *model, int kind = __node_kind)
     : _ScopeModelItem(model, kind), _M_classType(CodeModel::Class) {}
@@ -378,6 +380,8 @@ private:
   CodeModel::ClassType _M_classType;
 
   QStringList _M_propertyDeclarations;
+
+  bool _M_hasActualDeclaration{};
 
 private:
   _ClassModelItem(const _ClassModelItem &other);
@@ -468,6 +472,9 @@ public:
   bool isConstant() const;
   void setConstant(bool isConstant);
 
+  bool isConstexpr() const;
+  void setConstexpr(bool isConstexpr);
+
   bool isVolatile() const;
   void setVolatile(bool isVolatile);
 
@@ -516,15 +523,16 @@ private:
   {
     struct
     {
-      uint _M_isConstant: 1;
-      uint _M_isVolatile: 1;
-      uint _M_isStatic: 1;
-      uint _M_isAuto: 1;
-      uint _M_isFriend: 1;
-      uint _M_isRegister: 1;
-      uint _M_isExtern: 1;
-      uint _M_isMutable: 1;
-    };
+      uint isConstant: 1;
+      uint isConstexpr: 1;
+      uint isVolatile: 1;
+      uint isStatic: 1;
+      uint isAuto: 1;
+      uint isFriend: 1;
+      uint isRegister: 1;
+      uint isExtern: 1;
+      uint isMutable: 1;
+    } _M;
     uint _M_flags;
   };
 
@@ -564,6 +572,9 @@ public:
   bool isAbstract() const;
   void setAbstract(bool isAbstract);
 
+  bool isDeleted() const;
+  void setDeleted(bool isDeleted);
+
   bool isVariadics() const;
   void setVariadics(bool isVariadics);
 
@@ -584,13 +595,14 @@ private:
   {
     struct
     {
-      uint _M_isVirtual: 1;
-      uint _M_isInline: 1;
-      uint _M_isAbstract: 1;
-      uint _M_isExplicit: 1;
-      uint _M_isVariadics: 1;
-      uint _M_isInvokable : 1; // Qt
-    };
+      uint isVirtual: 1;
+      uint isInline: 1;
+      uint isAbstract: 1;
+      uint isDeleted: 1;
+      uint isExplicit: 1;
+      uint isVariadics: 1;
+      uint isInvokable : 1; // Qt
+    } _M;
     uint _M_flags;
   };
 

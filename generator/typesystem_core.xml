@@ -201,6 +201,8 @@
   <primitive-type name="jobject"/>
   <primitive-type name="quintptr"/>
   <primitive-type name="qintptr"/>
+  <primitive-type name="qptrdiff"/>
+  <primitive-type name="qsizetype"/>
 
   <value-type name="QModelIndex"/>
   <rejection class="*" function-name="d_func"/>
@@ -555,7 +557,27 @@
   <rejection class="QCoreApplication" function-name="setEventFilter"/>
   <rejection class="QFile" function-name="setDecodingFunction"/>
   <rejection class="QFile" function-name="setEncodingFunction"/>
+  <rejection class="QJsonArray" function-name="begin"/>
+  <rejection class="QJsonArray" function-name="cbegin"/>
+  <rejection class="QJsonArray" function-name="cend"/>
+  <rejection class="QJsonArray" function-name="constBegin"/>
+  <rejection class="QJsonArray" function-name="constEnd"/>
+  <rejection class="QJsonArray" function-name="end"/>
+  <rejection class="QJsonArray" function-name="erase"/>
+  <rejection class="QJsonArray" function-name="insert"/>
+  <rejection class="QJsonObject" function-name="begin"/>
+  <rejection class="QJsonObject" function-name="cbegin"/>
+  <rejection class="QJsonObject" function-name="cend"/>
+  <rejection class="QJsonObject" function-name="constBegin"/>
+  <rejection class="QJsonObject" function-name="constEnd"/>
+  <rejection class="QJsonObject" function-name="constFind"/>
+  <rejection class="QJsonObject" function-name="end"/>
+  <rejection class="QJsonObject" function-name="erase"/>
+  <rejection class="QJsonObject" function-name="find"/>
+  <rejection class="QJsonObject" function-name="insert"/>
   <rejection class="QList" function-name="begin"/>
+  <rejection class="QList" function-name="cbegin"/>
+  <rejection class="QList" function-name="cend"/>
   <rejection class="QList" function-name="constBegin"/>
   <rejection class="QList" function-name="constEnd"/>
   <rejection class="QList" function-name="end"/>
@@ -589,14 +611,20 @@
   <rejection class="QSettings" function-name="registerFormat"/>
   <rejection class="QVector" function-name="back"/>
   <rejection class="QVector" function-name="begin"/>
+  <rejection class="QVector" function-name="cbegin"/>
+  <rejection class="QVector" function-name="cend"/>
   <rejection class="QVector" function-name="constBegin"/>
   <rejection class="QVector" function-name="constEnd"/>
+  <rejection class="QVector" function-name="crbegin"/>
+  <rejection class="QVector" function-name="crend"/>
   <rejection class="QVector" function-name="end"/>
   <rejection class="QVector" function-name="erase"/>
   <rejection class="QVector" function-name="free"/>
   <rejection class="QVector" function-name="front"/>
   <rejection class="QVector" function-name="insert"/>
   <rejection class="QVector" function-name="malloc"/>
+  <rejection class="QVector" function-name="rbegin"/>
+  <rejection class="QVector" function-name="rend"/>
   <rejection class="QVector" function-name="alloc"/>
   <rejection class="QVector" function-name="operator+="/>
   <rejection class="QAbstractFileEngineIterator" function-name="entryInfo"/>
@@ -649,6 +677,7 @@
   <enum-type name="QSystemSemaphore::SystemSemaphoreError"/>
   <enum-type name="QTextBoundaryFinder::BoundaryReason" flags="QTextBoundaryFinder::BoundaryReasons"/>
   <enum-type name="QTextBoundaryFinder::BoundaryType"/>
+  <enum-type name="QThread::Priority"/>
   <enum-type name="QAbstractFileEngine::Extension" extensible="yes"/>
   <enum-type name="QAbstractFileEngine::FileFlag" flags="QAbstractFileEngine::FileFlags"/>
   <enum-type name="QAbstractFileEngine::FileName"/>
@@ -760,6 +789,9 @@
   <enum-type name="QDirIterator::IteratorFlag" flags="QDirIterator::IteratorFlags"/>
   <enum-type name="Qt::EventPriority"/>
   <enum-type name="Qt::MaskMode"/>
+  <enum-type name="QCborKnownTags"/>
+  <enum-type name="QCborSimpleType"/>
+  <enum-type name="QCborTag"/>
   <enum-type name="QCryptographicHash::Algorithm"/>
 
   <enum-type name="QtConcurrent::ReduceOption" flags="QtConcurrent::ReduceOptions"/>
@@ -1954,7 +1986,9 @@
   <enum-type name="QTimeZone::NameType"/>
   <enum-type name="QProcess::InputChannelMode"/>
   <enum-type name="QByteArray::Base64Option" flags="QByteArray::Base64Options"/>
+  <enum-type name="QMetaType::Type"/>
   <enum-type name="QMetaType::TypeFlag" flags="QMetaType::TypeFlags"/>
+  <enum-type name="QAbstractItemModel::CheckIndexOption"/>
   <enum-type name="QAbstractItemModel::LayoutChangeHint"/>
   <enum-type name="QTextCharFormat::FontPropertiesInheritanceBehavior"/>
   <enum-type name="QLocalServer::SocketOption" flags="QLocalServer::SocketOptions"/>

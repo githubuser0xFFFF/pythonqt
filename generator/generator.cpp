@@ -42,7 +42,6 @@
 #include "generator.h"
 #include "reporthandler.h"
 #include "fileout.h"
-
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -62,7 +61,7 @@ void Generator::generate()
         return;
     }
 
-    qStableSort(m_classes);
+    m_classes.sort();
 
     foreach (AbstractMetaClass *cls, m_classes) {
         if (!shouldGenerate(cls))
@@ -86,7 +85,7 @@ void Generator::printClasses()
     QTextStream s(stdout);
 
     AbstractMetaClassList classes = m_classes;
-    qSort(classes);
+    classes.sort();
 
     foreach (AbstractMetaClass *cls, classes) {
         if (!shouldGenerate(cls))
