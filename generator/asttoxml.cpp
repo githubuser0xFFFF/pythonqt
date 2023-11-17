@@ -47,7 +47,9 @@
 
 #include <QXmlStreamWriter>
 #include <QTextStream>
-#include <QTextCodec>
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+#   include <QTextCodec>
+#endif
 #include <QFile>
 
 void astToXML(QString name) {
@@ -57,7 +59,18 @@ void astToXML(QString name) {
         return;
 
     QTextStream stream(&file);
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
     stream.setCodec(QTextCodec::codecForName("UTF-8"));
+#else
+    /* NOTE, for Qt6:
+     *
+     *  stream.setEncoding(QStringConverter::Utf8)
+     *
+     * is the default but will be overridden if the UTF-16 BOM is seen.  This
+     * is almost certainly the correct behavior because the BOM isn't valid in
+     * a text stream otherwise.
+     */
+#endif
     QByteArray contents = stream.readAll().toUtf8();
     file.close();
 
@@ -73,9 +86,9 @@ void astToXML(QString name) {
 
     QFile outputFile;
     if (!outputFile.open(stdout, QIODevice::WriteOnly))
-	{
-	    return;
-	}
+    {
+      return;
+    }
 
     QXmlStreamWriter s( &outputFile);
     s.setAutoFormatting( true );
@@ -83,12 +96,12 @@ void astToXML(QString name) {
     s.writeStartElement("code");
 
     QHash<QString, NamespaceModelItem> namespaceMap = dom->namespaceMap();
-    foreach (NamespaceModelItem item, namespaceMap.values()) {
+    for (NamespaceModelItem item : namespaceMap.values()) {
         writeOutNamespace(s, item);
     }
 
     QHash<QString, ClassModelItem> typeMap = dom->classMap();
-    foreach (ClassModelItem item, typeMap.values()) {
+    for (ClassModelItem item : typeMap.values()) {
         writeOutClass(s, item);
     }
     s.writeEndElement();
@@ -100,17 +113,17 @@ void writeOutNamespace(QXmlStreamWriter &s, NamespaceModelItem &item) {
     s.writeAttribute("name", item->name());
 
     QHash<QString, NamespaceModelItem> namespaceMap = item->namespaceMap();
-    foreach (NamespaceModelItem namespaceItem, namespaceMap.values()) {
+    for (NamespaceModelItem namespaceItem : namespaceMap.values()) {
         writeOutNamespace(s, namespaceItem);
     }
 
     QHash<QString, ClassModelItem> typeMap = item->classMap();
-    foreach (ClassModelItem classItem, typeMap.values()) {
+    for (ClassModelItem classItem : typeMap.values()) {
         writeOutClass(s, classItem);
     }
 
     QHash<QString, EnumModelItem> enumMap = item->enumMap();
-    foreach (EnumModelItem enumItem, enumMap.values()) {
+    for (EnumModelItem enumItem : enumMap.values()) {
         writeOutEnum(s, enumItem);
     }
 
@@ -160,17 +173,17 @@ void writeOutClass(QXmlStreamWriter &s, ClassModelItem &item) {
     s.writeAttribute("name", qualified_name);
 
     QHash<QString, EnumModelItem> enumMap = item->enumMap();
-    foreach (EnumModelItem enumItem, enumMap.values()) {
+    for (EnumModelItem enumItem : enumMap.values()) {
         writeOutEnum(s, enumItem);
     }
 
-    QHash<QString, FunctionModelItem> functionMap = item->functionMap();
-    foreach (FunctionModelItem funcItem, functionMap.values()) {
+    QMultiHash<QString, FunctionModelItem> functionMap = item->functionMap();
+    for (FunctionModelItem funcItem : functionMap.values()) {
         writeOutFunction(s, funcItem);
     }
 
     QHash<QString, ClassModelItem> typeMap = item->classMap();
-    foreach (ClassModelItem classItem, typeMap.values()) {
+    for (ClassModelItem classItem : typeMap.values()) {
         writeOutClass(s, classItem);
     }
     s.writeEndElement();

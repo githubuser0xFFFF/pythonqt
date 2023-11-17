@@ -173,7 +173,7 @@ void PythonQtScriptingConsole::executeCode(const QString& code)
   _stdOut = "";
   _stdErr = "";
   PythonQtObjectPtr p;
-  PyObject* dict = NULL;
+  PyObject* dict = nullptr;
   if (PyModule_Check(_context)) {
     dict = PyModule_GetDict(_context);
   } else if (PyDict_Check(_context)) {
@@ -450,8 +450,9 @@ void PythonQtScriptingConsole::keyPressEvent(QKeyEvent* event) {
   }
 
   if (eventHandled) {
-
-    _completer->popup()->hide();
+    if(_completer != nullptr) {
+        _completer->popup()->hide();
+    }
     event->accept();
 
   } else {
@@ -463,7 +464,6 @@ void PythonQtScriptingConsole::keyPressEvent(QKeyEvent* event) {
     } else {
       _completer->popup()->hide();
     }
-    eventHandled = true;
   }
 }
 

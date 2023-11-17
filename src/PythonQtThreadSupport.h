@@ -39,7 +39,7 @@
 */
 //----------------------------------------------------------------------------------
 
-
+#include <QtGlobal> //Q_DISABLE_COPY
 #include "PythonQtPythonInclude.h"
 #include "PythonQtSystem.h"
 
@@ -103,6 +103,7 @@ public:
 //! from Python code.
 class PythonQtThreadStateSaver
 {
+  Q_DISABLE_COPY(PythonQtThreadStateSaver)
 public:
   PythonQtThreadStateSaver() {
     save();
@@ -119,7 +120,7 @@ public:
   void restore() {
     if (_state) {
       PyEval_RestoreThread(_state);
-      _state = NULL;
+      _state = nullptr;
     }
   }
 

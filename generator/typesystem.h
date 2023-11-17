@@ -48,6 +48,40 @@
 #include <QtCore/QMap>
 #include <QDebug>
 
+/* BEGIN: Qt6 compatibility.  The following can removed when versions of Qt
+ * prior to 5.14 are no longer supported.
+ */
+/* QString::SkipEmptyParts was replicated in Qt::SplitBehavior in 15.4 and the
+ * QString original deprecated then it was removed in Qt6.  This provides
+ * forward compatibility with Qt6 for versions of Qt prior to 15.4:
+ */
+#if QT_VERSION < QT_VERSION_CHECK(5,14,0)
+    namespace Qt {
+        const QString::SplitBehavior SkipEmptyParts = QString::SkipEmptyParts;
+    };
+#endif
+
+/* Global endl (::endl) is used extensively in the generator .cpp files.  This
+ * was supported by Qt until Qt6.  In Qt5.14 Qt::endl was added in anticipation
+ * of the Qt6 change and the use of global endl could be avoided (it does not
+ * seem to have been explicitly deprecated).  This gives backward compatibility
+ * for global endl in Qt6 (not Qt5, where global endl was still available).
+ *
+ * Note that 'constexpr' is available in Qt6 because Qt6 requires C++17;
+ * constexpr was introduced in C++11.  Likewise for decltype.  Qt::endl is a
+ * function so ::endl is a pointer to the function and the implicit conversion
+ * is used; this is to cause an compiler error in the future if the base type
+ * of Qt::endl changes.
+ *
+ * When versions of Qt older than 5.14 are no longer supported this can be
+ * removed however all the 'endl' references in the code will need to be
+ * changed to Qt::endl.
+ */
+#if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
+    static const constexpr decltype (Qt::endl) *endl = Qt::endl;
+#endif
+/* END: Qt compatibility. */
+
 class Indentor;
 
 class AbstractMetaType;
@@ -133,7 +167,7 @@ namespace TypeSystem {
 
     //! A better normalized signature, which takes care of PODs with the same name
     QByteArray normalizedSignature(const char* signature);
-};
+}
 
 struct ReferenceCount
 {
@@ -750,7 +784,7 @@ class ComplexTypeEntry : public TypeEntry
 public:
     enum TypeFlag {
         ForceAbstract      = 0x1,
-	    DeleteInMainThread = 0x2,
+        DeleteInMainThread = 0x2,
         Deprecated         = 0x4
     };
     typedef QFlags<TypeFlag> TypeFlags;
@@ -1052,7 +1086,7 @@ public:
     }
 
 private:
-    ObjectTypeEntry *m_origin;
+    ObjectTypeEntry *m_origin{};
 };
 
 
@@ -1120,7 +1154,7 @@ public:
         SingleTypeEntryHash returned;
         QList<QString> keys = entries.keys();
 
-        foreach(QString key, keys) {
+        for (QString key :  keys) {
             returned[key] = findType(key);
         }
 
@@ -1159,7 +1193,8 @@ public:
         foreach (const QString &_warning, m_suppressedWarnings) {
             QString warning(QString(_warning).replace("\\*", "&place_holder_for_asterisk;"));
 
-            QStringList segs = warning.split("*", QString::SkipEmptyParts);
+            QStringList segs = warning.split("*", Qt::SkipEmptyParts);
+
             if (segs.size() == 0)
                 continue ;
 

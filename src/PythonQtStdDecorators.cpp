@@ -45,6 +45,7 @@
 #include "PythonQtConversion.h"
 
 #include <QCoreApplication>
+#include <QRegularExpression>
 
 bool PythonQtStdDecorators::connect(QObject* sender, const QByteArray& signal, PyObject* callable)
 {
@@ -113,8 +114,8 @@ bool PythonQtStdDecorators::disconnect(QObject* sender, const QByteArray& signal
   }
   if (sender) {
     result = PythonQt::self()->removeSignalHandler(sender, signalTmp, callable);
-    if (callable == NULL) {
-      result |= QObject::disconnect(sender, signalTmp, NULL, NULL);
+    if (callable == nullptr) {
+      result |= QObject::disconnect(sender, signalTmp, nullptr, nullptr);
     }
     if (!result) {
       if (sender->metaObject()->indexOfSignal(QMetaObject::normalizedSignature(signalTmp.constData()+1)) == -1) {
@@ -196,7 +197,7 @@ void PythonQtStdDecorators::static_QTimer_singleShot(int msec, PyObject* callabl
 
 QObject* PythonQtStdDecorators::findChild(QObject* parent, PyObject* type, const QString& name)
 {
-  const QMetaObject* meta = NULL;
+  const QMetaObject* meta = nullptr;
   QByteArray typeName;
 
   if (PyObject_TypeCheck(type, &PythonQtClassWrapper_Type)) {
@@ -208,7 +209,7 @@ QObject* PythonQtStdDecorators::findChild(QObject* parent, PyObject* type, const
   }
 
   if (typeName.isEmpty() && !meta) {
-    return NULL;
+    return nullptr;
   }
 
   return findChild(parent, typeName, meta, name);
@@ -216,7 +217,7 @@ QObject* PythonQtStdDecorators::findChild(QObject* parent, PyObject* type, const
 
 QList<QObject*> PythonQtStdDecorators::findChildren(QObject* parent, PyObject* type, const QString& name)
 {
-  const QMetaObject* meta = NULL;
+  const QMetaObject* meta = nullptr;
   QByteArray typeName;
 
   if (PyObject_TypeCheck(type, &PythonQtClassWrapper_Type)) {
@@ -240,9 +241,9 @@ QList<QObject*> PythonQtStdDecorators::findChildren(QObject* parent, PyObject* t
   return list;
 }
 
-QList<QObject*> PythonQtStdDecorators::findChildren(QObject* parent, PyObject* type, const QRegExp& regExp)
+QList<QObject*> PythonQtStdDecorators::findChildren(QObject* parent, PyObject* type, const QRegularExpression& regExp)
 {
-  const QMetaObject* meta = NULL;
+  const QMetaObject* meta = nullptr;
   QByteArray typeName;
 
   if (PyObject_TypeCheck(type, &PythonQtClassWrapper_Type)) {
@@ -274,7 +275,7 @@ QObject* PythonQtStdDecorators::findChild(QObject* parent, const char* typeName,
     QObject* obj = children.at(i);
 
     if (!obj)
-      return NULL;
+      return nullptr;
 
     // Skip if the name doesn't match.
     if (!name.isNull() && obj->objectName() != name)
@@ -288,11 +289,11 @@ QObject* PythonQtStdDecorators::findChild(QObject* parent, const char* typeName,
   for (i = 0; i < children.size(); ++i) {
     QObject* obj = findChild(children.at(i), typeName, meta, name);
 
-    if (obj != NULL)
+    if (obj != nullptr)
       return obj;
   }
 
-  return NULL;
+  return nullptr;
 }
 
 int PythonQtStdDecorators::findChildren(QObject* parent, const char* typeName, const QMetaObject* meta, const QString& name, QList<QObject*>& list)
@@ -322,7 +323,7 @@ int PythonQtStdDecorators::findChildren(QObject* parent, const char* typeName, c
   return 0;
 }
 
-int PythonQtStdDecorators::findChildren(QObject* parent, const char* typeName, const QMetaObject* meta, const QRegExp& regExp, QList<QObject*>& list)
+int PythonQtStdDecorators::findChildren(QObject* parent, const char* typeName, const QMetaObject* meta, const QRegularExpression& regExp, QList<QObject*>& list)
 {
   const QObjectList& children = parent->children();
   int i;
@@ -334,7 +335,8 @@ int PythonQtStdDecorators::findChildren(QObject* parent, const char* typeName, c
       return -1;
 
     // Skip if the name doesn't match.
-    if (regExp.indexIn(obj->objectName()) == -1)
+    QRegularExpressionMatch match = regExp.match(obj->objectName());
+    if (match.hasMatch() == false)
       continue;
 
     if ((typeName && obj->inherits(typeName)) ||
@@ -353,6 +355,17 @@ const QMetaObject* PythonQtStdDecorators::metaObject( QObject* obj )
 {
   return obj->metaObject();
 }
+
+//---------------------------------------------------------------------------
+
+void PythonQtConfigAPI::setTaskDoneCallback(PyObject* object)
+{
+  if (PythonQt::self()) {
+    PythonQt::self()->priv()->setTaskDoneCallback(object);
+  }
+}
+
+//---------------------------------------------------------------------------
 
 bool PythonQtDebugAPI::isOwnedByPython( PyObject* object )
 {
@@ -421,11 +434,19 @@ PythonQtSingleShotTimer::PythonQtSingleShotTimer(int msec, const PythonQtObjectP
   connect(this, SIGNAL(timeout()), this, SLOT(slotTimeout()));
 }
 
+PythonQtSingleShotTimer::~PythonQtSingleShotTimer()
+{
+  PYTHONQT_GIL_SCOPE
+  _callable = nullptr;
+}
+
 void PythonQtSingleShotTimer::slotTimeout()
 {
   if (_callable) {
+    PYTHONQT_GIL_SCOPE
     _callable.call();
   }
   // delete ourself
   deleteLater();
 }
+

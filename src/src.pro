@@ -4,18 +4,23 @@
 # $Source$
 # --------------------------------------------------
 
-TARGET   = PythonQt-Qt5-PythonXY
+contains(QT_MAJOR_VERSION, 6) {
+    TARGET = PythonQt-Qt6-PythonXY
+} else {
+    TARGET = PythonQt-Qt5-PythonXY
+}
 TEMPLATE = lib
-
 
 DESTDIR    = ../lib
 
 CONFIG += qt
 CONFIG -= flat
 
-
 # allow to choose static linking through the environment variable PYTHONQT_STATIC
+isEmpty(PYTHONQT_STATIC) {
 PYTHONQT_STATIC = $$(PYTHONQT_STATIC)
+}
+
 isEmpty(PYTHONQT_STATIC) {
   CONFIG += dll
 } else {
@@ -24,14 +29,15 @@ isEmpty(PYTHONQT_STATIC) {
 
 DEFINES += PYTHONQT_CATCH_ALL_EXCEPTIONS
 
-contains(QT_MAJOR_VERSION, 5) {
-  QT += widgets core-private
-}
+QT += widgets core-private
 
-# Qt 5.4 adds this option, but this is not compatible with the Python API
-QMAKE_CXXFLAGS_RELEASE -= -Zc:strictStrings
- 
 INCLUDEPATH += $$PWD
+
+macx {
+  contains(QT_MAJOR_VERSION, 6) {
+    QMAKE_APPLE_DEVICE_ARCHS = x86_64 arm64
+  }
+}
 
 include ( ../build/common.prf )  
 include ( ../build/python.prf )
@@ -44,19 +50,19 @@ include($${PYTHONQT_GENERATED_PATH}/com_trolltech_qt_gui_builtin/com_trolltech_q
 
 unix {
   CONFIG += create_pc create_prl no_install_prl
-  QMAKE_PKGCONFIG_NAME = PythonQt-Qt$${QT_MAJOR_VERSION}-Python$${PYTHON_VERSION}
+  QMAKE_PKGCONFIG_NAME = $${TARGET}
   QMAKE_PKGCONFIG_DESCRIPTION = Dynamic Python binding for the Qt framework
   QMAKE_PKGCONFIG_PREFIX = $$INSTALLBASE
   QMAKE_PKGCONFIG_LIBDIR = $$target.path
   QMAKE_PKGCONFIG_INCDIR = $$headers.path
-  QMAKE_PKGCONFIG_INCDIR += $$PREFIX/include/PythonQt5
+  QMAKE_PKGCONFIG_INCDIR += ${prefix}/include/PythonQt5
   QMAKE_PKGCONFIG_VERSION = $$VERSION
 }
 
-unix: target.path = /lib
+unix: target.path = $${INSTALL_PREFIX}/lib
 win32: target.path = /
 
 headers.files = $${HEADERS} $$PWD/PythonQtPythonInclude.h
-headers.path = /include
+headers.path = $${INSTALL_PREFIX}/include
 
 INSTALLS += target headers

@@ -39,6 +39,8 @@
 **
 ****************************************************************************/
 
+#include <algorithm> // for std::sort
+
 #include "prigenerator.h"
 #include "shellgenerator.h"
 #include "reporthandler.h"
@@ -72,7 +74,7 @@ static QString combineIncludes(const QString& text) {
   QStringList lines = text.split('\n');
   QSet<QString> includes;
   QString result;
-  foreach(QString line, lines) {
+  for (QString line :  lines) {
     if (line.startsWith("#include")) {
       includes.insert(line);
     } else if (line.startsWith("#") && line.contains("PYTHONQTWRAPPER_")) {
@@ -81,13 +83,17 @@ static QString combineIncludes(const QString& text) {
       result += line + "\n";
     }
   }
-  QStringList includeList = includes.toList();
-  qSort(includeList);
+#if QT_VERSION < QT_VERSION_CHECK(5,14,0)
+      QStringList includeList = includes.toList();
+#else
+      QStringList includeList(includes.begin(), includes.end());
+#endif
+  std::sort(includeList.begin(), includeList.end());
   result = includeList.join("\n") + result;
   return result;
 }
 
-static QStringList compactFiles(const QStringList& list, const QString& ext, const QString& dir, const QString& prefix) {
+QStringList PriGenerator::compactFiles(const QStringList& list, const QString& ext, const QString& dir, const QString& prefix) {
   QStringList outList;
   int count = list.count();
   int fileNum = 0;
@@ -104,7 +110,7 @@ static QStringList compactFiles(const QStringList& list, const QString& ext, con
     outList << outFileName;
     QString allText;
     QTextStream ts(&allText);
-    for (int i = 0; i<MAX_CLASSES_PER_FILE && count>0; i++) {
+    for (int i = 0; i< maxClassesPerFile && count>0; i++) {
       collectAndRemoveFile(ts,  srcDir + "/" + list.at(list.count()-count));
       count--;
     }
@@ -129,7 +135,7 @@ void PriGenerator::generate()
         int idx = folder.indexOf('/');
         folder = folder.left(idx);
 
-        qSort(list.begin(), list.end());
+        std::sort(list.begin(), list.end());
         FileOut file(m_out_dir + "/generated_cpp/" + pri.key());
       
         // strange idea to do the file compacting so late, but it is the most effective way without patching the generator a lot
@@ -146,7 +152,7 @@ void PriGenerator::generate()
         file.stream << "\n";
         file.stream << "SOURCES += \\\n";
         list = pri.value().sources;
-        qSort(list.begin(), list.end());
+        std::sort(list.begin(), list.end());
         if (compact) {
           list = compactFiles(list, ".cpp", m_out_dir + "/generated_cpp/" + folder, folder); 
         }

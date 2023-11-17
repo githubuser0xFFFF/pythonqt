@@ -39,12 +39,15 @@
 **
 ****************************************************************************/
 
+#include <cstdio>
+
 #include "main.h"
 #include "asttoxml.h"
 #include "reporthandler.h"
 #include "typesystem.h"
 #include "generatorset.h"
 #include "fileout.h"
+#include "control.h"
 
 #include <QDir>
 
@@ -53,7 +56,9 @@ void displayHelp(GeneratorSet *generatorSet);
 #include <QDebug>
 int main(int argc, char *argv[])
 {
-    GeneratorSet *gs = GeneratorSet::getInstance();
+    ReportHandler::setContext("Arguments");
+
+    QScopedPointer<GeneratorSet> gs(GeneratorSet::getInstance());
 
     QString default_file = ":/trolltech/generator/qtscript_masterinclude.h";
     QString default_system = ":/trolltech/generator/build_all.txt";
@@ -98,6 +103,10 @@ int main(int argc, char *argv[])
             ReportHandler::setDebugLevel(ReportHandler::FullDebug);
     }
 
+    if (args.contains("print-parser-errors")) {
+      Control::setPrintErrors(true);
+    }
+
     if (args.contains("dummy")) {
         FileOut::dummy = true;
     }
@@ -110,7 +119,7 @@ int main(int argc, char *argv[])
         FileOut::license = true;
 
     if (args.contains("rebuild-only")) {
-        QStringList classes = args.value("rebuild-only").split(",", QString::SkipEmptyParts);
+        QStringList classes = args.value("rebuild-only").split(",", Qt::SkipEmptyParts);
         TypeDatabase::instance()->setRebuildClasses(classes);
     }
 
@@ -118,7 +127,7 @@ int main(int argc, char *argv[])
 
     typesystemFileName = args.value("arg-2");
     if (args.contains("arg-3"))
-        displayHelp(gs);
+        displayHelp(&*gs);
 
     if (fileName.isEmpty())
         fileName = default_file;
@@ -127,19 +136,21 @@ int main(int argc, char *argv[])
         typesystemFileName = default_system;
 
     if (fileName.isEmpty() || typesystemFileName.isEmpty() )
-        displayHelp(gs);
+        displayHelp(&*gs);
 
     if (!gs->readParameters(args))
-        displayHelp(gs);
+        displayHelp(&*gs);
 
     printf("Please wait while source files are being generated...\n");
 
     printf("Parsing typesystem file [%s]\n", qPrintable(typesystemFileName));
+    ReportHandler::setContext("Typesystem");
     if (!TypeDatabase::instance()->parseFile(typesystemFileName))
         qFatal("Cannot parse file: '%s'", qPrintable(typesystemFileName));
 
     printf("PreProcessing - Generate [%s] using [%s] and include-paths [%s]\n",
       qPrintable(pp_file), qPrintable(fileName), qPrintable(args.value("include-paths")));
+    ReportHandler::setContext("Preprocess");
     if (!Preprocess::preprocess(fileName, pp_file, args.value("include-paths"))) {
         fprintf(stderr, "Preprocessor failed on file: '%s'\n", qPrintable(fileName));
         return 1;
@@ -148,16 +159,19 @@ int main(int argc, char *argv[])
     if (args.contains("ast-to-xml")) {
       printf("Running ast-to-xml on file [%s] using pp_file [%s] and include-paths [%s]\n",
         qPrintable(fileName), qPrintable(pp_file), qPrintable(args.value("include-paths")));
+      ReportHandler::setContext(QString("AST-to-XML"));
       astToXML(pp_file);
       return 0;
     }
 
     printf("Building model using [%s]\n", qPrintable(pp_file));
+    ReportHandler::setContext("Build");
     gs->buildModel(pp_file);
     if (args.contains("dump-object-tree")) {
         gs->dumpObjectTree();
         return 0;
     }
+    ReportHandler::setContext("Generate");
     printf("%s\n", qPrintable(gs->generate()));
 
     printf("Done, %d warnings (%d known issues)\n", ReportHandler::warningCount(),
@@ -175,6 +189,7 @@ void displayHelp(GeneratorSet* generatorSet) {
     printf("Available options:\n\n");
     printf("General:\n");
     printf("  --debug-level=[sparse|medium|full]        \n"
+           "  --print-parser-errors                     \n"
            "  --dump-object-tree                        \n"
            "  --help, -h or -?                          \n"
            "  --no-suppress-warnings                    \n"

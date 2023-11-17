@@ -1,0 +1,332 @@
+name: Build
+
+on:
+  push:
+    branches: 
+      - master
+  pull_request:
+      
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  ubuntu:
+    strategy:
+      fail-fast: false
+      matrix:
+        container_version:
+        - '20.04'
+        - '22.04'
+    runs-on: ubuntu-latest
+    container: ubuntu:${{ matrix.container_version }}
+    steps:
+    - name: Install Qt
+      run: |
+        apt-get update
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --force-yes \
+        build-essential \
+        python3 \
+        python3-dev \
+        libpython3-dev \
+        qtbase5-dev \
+        qtbase5-private-dev \
+        qt5-qmake \
+        qtbase5-dev-tools \
+        qttools5-dev \
+        qtdeclarative5-dev \
+        libqt5svg5* \
+        libqt5xmlpatterns5* \
+        libqt5multimedia5* \
+        libqt5multimediawidgets5* \
+        libqt5qml5* \
+        libqt5quickwidgets5* \
+        qtmultimedia5-dev
+        apt-get clean
+      
+    - name: Checkout PythonQt
+      uses: actions/checkout@v3
+
+    - name: Build PythonQt
+      run: |
+        export QT_SELECT=qt5
+        echo ======= SYSTEM INFO ========
+        uname -a; gcc --version | grep "gcc"; python3 --version; qmake --version
+        echo ============================
+        qmake -r PythonQt.pro CONFIG+=release CONFIG+=force_debug_info \
+        CONFIG+=sanitizer CONFIG+=sanitize_undefined CONFIG+=sanitize_address \
+        PYTHON_VERSION=$(python3 --version | cut -d " " -f 2 | cut -d "." -f1,2) \
+        PYTHON_DIR=$(which python3 | xargs dirname | xargs dirname)
+        make -j 2
+        UBSAN_OPTIONS="halt_on_error=1" ASAN_OPTIONS="detect_leaks=0:detect_stack_use_after_return=1:fast_unwind_on_malloc=0" \
+          make check TESTARGS="-platform offscreen"
+      
+    - name: Generate Wrappers
+      run: |
+        # workaround to allow to find the Qt include dirs for installed standard qt packages
+        mkdir /usr/include/qt5; ln -s /usr/include/x86_64-linux-gnu/qt5 /usr/include/qt5/include
+        export QTDIR=/usr/include/qt5
+        cd generator
+        UBSAN_OPTIONS="halt_on_error=1" ASAN_OPTIONS="detect_leaks=0:detect_stack_use_after_return=1:fast_unwind_on_malloc=0" \
+        ./pythonqt_generator
+
+    - name: Upload Wrappers
+      uses: actions/upload-artifact@v3
+      with:
+        name: wrappers_ubuntu_${{ matrix.container_version }}
+        path: generated_cpp
+
+  oldschool:
+    strategy:
+      fail-fast: false
+      matrix:
+        container_os: ['centos']
+        container_os_version: ['7']
+        container_os_python_package: ['python-debug']
+        configuration: ['debug', 'release']
+        include:
+          - container_os: 'rockylinux'
+            container_os_version: '9'
+            container_os_python_package: 'python3-devel'
+            configuration: 'release'
+    runs-on: ubuntu-latest
+    container: '${{ matrix.container_os }}:${{ matrix.container_os_version }}'
+    steps:
+    - name: Install Qt
+      run: |
+        yum update -y
+        yum groupinstall "Development Tools" -y
+        yum install -y \
+        which \
+        ${{ matrix.container_os_python_package }} \
+        qt5-qtbase-* \
+        qt5-qttools* \
+        qt5-qtsvg \
+        qt5-qtxmlpatterns \
+        qt5-qtmultimedia \
+        qt5-qt3d \
+        qt5-*-devel
+
+    - name: Checkout PythonQt
+      uses: actions/checkout@v3
+
+    - name: Build PythonQt
+      run: |
+        export QT_SELECT=qt5
+        echo ======= SYSTEM INFO ========
+        which python 2>/dev/null && export PYTHON_VERSION_SUFFIX= || export PYTHON_VERSION_SUFFIX=3
+        uname -a; gcc --version | grep "gcc"; python${PYTHON_VERSION_SUFFIX} --version; qmake-qt5 --version
+        echo ============================
+        qmake-qt5 -r PythonQt.pro CONFIG+=${{ matrix.configuration }} \
+          PYTHON_VERSION=$(python${PYTHON_VERSION_SUFFIX} --version | cut -d " " -f 2 | cut -d "." -f1,2) \
+          PYTHON_DIR=$(which python${PYTHON_VERSION_SUFFIX} | xargs dirname | xargs dirname)
+        make -j 2 && make check TESTARGS="-platform offscreen"
+
+    - name: Generate Wrappers
+      run: |
+        # workaround to allow to find the Qt include dirs for installed standard qt packages
+        mkdir /usr/include/qt5ln; ln -s /usr/include/qt5 /usr/include/qt5ln/include
+        export QTDIR=/usr/include/qt5ln
+        cd generator
+        ./pythonqt_generator
+
+    - name: Upload Wrappers
+      uses: actions/upload-artifact@v3
+      with:
+        name: wrappers_${{ matrix.container_os }}-${{ matrix.container_os_version }}_${{ matrix.configuration }}
+        path: generated_cpp
+
+  macOS:
+    strategy:
+      fail-fast: false
+      matrix:
+       macos-version:  ['11']
+       python-version: ['3.6']
+       qt-version: ['5.9.*']
+       configuration: ['release','debug']
+       include:
+         - macos-version: '12'
+           python-version: '3.11'
+           qt-version: '5.12.*'
+           configuration: 'debug'
+    runs-on: macos-${{ matrix.macos-version }}
+    steps:
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v3
+      with:
+        aqtversion: '==2.1.*'
+        version: ${{ matrix.qt-version }}
+        host: 'mac'
+        target: 'desktop'
+        arch: 'clang_64'
+        modules: 'qtscript'
+        archives: 'qtmultimedia qtmacextras qtbase qttools'
+
+    - name: Setup Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: '${{ matrix.python-version }}'
+
+    - name: Checkout PythonQt
+      uses: actions/checkout@v3
+
+    - name: Detect exact versions
+      id : versions
+      run : |
+        set -eu
+        PYTHON_VERSION_FULL=$(python --version 2>&1 | cut -f 2 -d ' ')
+        PYTHON_VERSION_SHORT=$(cut -f 1,2 -d . <<< $PYTHON_VERSION_FULL)
+        QT_VERSION_FULL=$($Qt5_Dir/bin/qmake -query QT_VERSION)
+        QT_VERSION_SHORT=$(cut -f 1,2 -d . <<< $QT_VERSION_FULL)
+        MACOS_VERSION_FULL=$(sw_vers -productVersion)
+        MACOS_VERSION_SHORT=$(cut -f 1,2 -d . <<< $MACOS_VERSION_FULL)
+
+        echo "PYTHON_VERSION_FULL=$PYTHON_VERSION_FULL" | tee -a $GITHUB_OUTPUT
+        echo "PYTHON_VERSION_SHORT=$PYTHON_VERSION_SHORT" | tee -a $GITHUB_OUTPUT
+        echo "QT_VERSION_FULL=$QT_VERSION_FULL" | tee -a $GITHUB_OUTPUT
+        echo "QT_VERSION_SHORT=$QT_VERSION_SHORT" | tee -a $GITHUB_OUTPUT
+        echo "MACOS_VERSION_FULL=$MACOS_VERSION_FULL" | tee -a $GITHUB_OUTPUT
+        echo "MACOS_VERSION_SHORT=$MACOS_VERSION_SHORT" | tee -a $GITHUB_OUTPUT
+
+    - name: Build PythonQt
+      run: |
+        set -ue
+        echo ======= SYSTEM INFO ========
+        uname -a; gcc --version | head -n 1; python --version; qmake --version
+        echo ============================
+        PYTHON_VERSION_MAJOR=$(cut -d . -f1 <<< ${{ steps.versions.outputs.PYTHON_VERSION_SHORT }})
+        for i in "python${{ steps.versions.outputs.PYTHON_VERSION_SHORT }}-embed" "python${{ steps.versions.outputs.PYTHON_VERSION_SHORT }}" \
+                 "python${PYTHON_VERSION_MAJOR}-embed" "python${PYTHON_VERSION_MAJOR}"
+        do if pkg-config --exists "$i"; then PYTHON_PKGCONFIG_NAME="$i"; break; fi; done
+        qmake CONFIG+=${{ matrix.configuration }} CONFIG+=sanitizer CONFIG+=sanitize_undefined CONFIG+=sanitize_address \
+          PYTHON_VERSION=${{ steps.versions.outputs.PYTHON_VERSION_SHORT }} \
+          PYTHON_DIR="$pythonLocation" \
+          PKGCONFIG+=$PYTHON_PKGCONFIG_NAME \
+          -r PythonQt.pro
+        make -j 2
+        UBSAN_OPTIONS="halt_on_error=1" ASAN_OPTIONS="detect_leaks=0:detect_stack_use_after_return=1:fast_unwind_on_malloc=0" \
+          make check TESTARGS="-platform offscreen"
+
+    - name: Generate Wrappers
+      if: ${{ contains(matrix.configuration, 'release') }}
+      run: |
+        cd generator
+        # workaround to allow to find the Qt include dirs for installed standard qt packages
+        UBSAN_OPTIONS="halt_on_error=1" ASAN_OPTIONS="detect_leaks=0:detect_stack_use_after_return=1:fast_unwind_on_malloc=0" \
+        QTDIR=-UNDEFINED- ./pythonqt_generator --include-paths=$Qt5_Dir/lib
+
+    - name: Upload Wrappers
+      uses: actions/upload-artifact@v3
+      with:
+        name: wrappers_macos${{ steps.versions.outputs.MACOS_VERSION_SHORT }}_qt${{ steps.versions.outputs.QT_VERSION_SHORT }}
+        path: generated_cpp
+
+  windows:
+    strategy:
+      fail-fast: false
+      matrix:
+       qt-arch: ['win64_mingw73']
+       python-version: ['3.10']
+       qt-version: ['5.12.*']
+       python-arch: ['x64']
+       pythonqtall-config: ['']
+#       msvc-toolset: ['14.0']
+       include:
+         - qt-arch: 'win64_msvc2017_64'
+           python-version: '3.6'
+           python-arch: 'x64'
+           qt-version: '5.11.*'
+#           msvc-toolset: '14.16'
+
+         - qt-arch: 'win32_mingw53'
+           python-version: '3.6'
+           python-arch: 'x86'
+           qt-version: '5.11.*'
+
+#Either MSVC2015 is sick or Qt5.9 is buggy :(
+#Main problem is QBasicMutex with default ctor, that (by no means) is missing in dll-export of QtCore, but linker tries to find it
+#         - qt-arch: 'win32_msvc2015'
+#           python-version: '2.7'
+#           python-arch: 'x86'
+#           qt-version: '5.9.*'
+#           pythonqtall-config: 'PythonQtCore PythonQtGui PythonQtMultimedia'
+
+    runs-on: windows-latest
+    steps:
+
+    - name: Checkout PythonQt
+      uses: actions/checkout@v3
+
+    - name: Reset PATH
+      uses: egor-tensin/cleanup-path@v3
+
+    - name: Install MSVC++
+      uses: ilammy/msvc-dev-cmd@v1
+      if: ${{ contains(matrix.qt-arch, 'msvc') }}
+      with:
+        arch: amd64${{ contains(matrix.python-arch, 'x86') && '_x86' || '' }}
+
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v3
+      with:
+        aqtversion: '==2.1.*'
+        version: ${{ matrix.qt-version }}
+        host: 'windows'
+        target: 'desktop'
+        arch: ${{ matrix.qt-arch }}
+        modules: 'qtscript'
+        archives: 'qtwinextras qtmultimedia qtbase'
+        tools: ${{ contains(matrix.qt-arch, 'mingw') && format('tools_mingw,qt.tools.{0}0', matrix.qt-arch) || '' }}
+
+    - name: Setup Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: '${{ matrix.python-version }}'
+        architecture: ${{ matrix.python-arch }}
+
+    - name: Detect exact versions
+      shell: bash
+      id: versions
+      run: |
+        set -eu
+        QT_VERSION_FULL=$("$Qt5_Dir/bin/qmake" -query QT_VERSION)
+        QT_VERSION_SHORT=$(cut -f 1,2 -d . <<< $QT_VERSION_FULL)
+        PYTHON_VERSION_FULL=$(python --version 2>&1 | cut -f 2 -d ' ')
+        PYTHON_VERSION_SHORT=$(cut -f 1,2 -d . <<< $PYTHON_VERSION_FULL)
+        echo "QT_VERSION_FULL=$QT_VERSION_FULL" | tee -a $GITHUB_OUTPUT
+        echo "QT_VERSION_SHORT=$QT_VERSION_SHORT" | tee -a $GITHUB_OUTPUT
+        echo "PYTHON_VERSION_SHORT=$PYTHON_VERSION_SHORT" | tee -a $GITHUB_OUTPUT
+
+    - name: Add Qt and MinGW to PATH
+      shell: cmd
+      run: |
+        set "ADDPATH=%Qt5_Dir%\bin"
+        ${{ contains(matrix.qt-arch, 'mingw') && format('FOR /F "tokens=1,2 delims=_" %%I IN ("{0}") DO SET "ADDPATH=%ADDPATH%;%IQTA_TOOLS%\%%J0_{1}\bin', matrix.qt-arch, contains(matrix.qt-arch, 'win32') && '32' || '64') || '' }}
+        echo PATH=%ADDPATH%;%PATH% >> %GITHUB_ENV%
+        echo CL=/MP >> $GITHUB_ENV
+
+    - name: Build PythonQt
+      shell: cmd
+      run: |
+        qmake -query
+        python --version
+        qmake CONFIG+=release CONFIG-=debug_and_release CONFIG-=debug_and_release_target ^
+           "PYTHONQTALL_CONFIG=${{ matrix.pythonqtall-config }}" ^
+           "PYTHON_PATH=%pythonLocation%" ^
+           "PYTHON_VERSION=${{ steps.versions.outputs.PYTHON_VERSION_SHORT }}" ^
+           PythonQt.pro
+        mingw32-make -j 2 && mingw32-make check "TESTARGS=-platform offscreen" ^
+          || nmake && nmake check "TESTARGS=-platform offscreen"
+
+    - name: Generate Wrappers
+      shell: cmd
+      run: |
+        cd generator
+        set QTDIR=%Qt5_Dir%
+        pythonqt_generator
+
+    - name: Upload Wrappers
+      uses: actions/upload-artifact@v3
+      with:
+        name: wrappers_${{ matrix.qt-arch }}_${{ steps.versions.outputs.QT_VERSION_SHORT }}
+        path: generated_cpp

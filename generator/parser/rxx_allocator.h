@@ -82,31 +82,34 @@ public:
     const size_type bytes = __n * sizeof(_Tp);
 
     if (_M_current_block == 0
-	|| _S_block_size < _M_current_index + bytes)
+        || _S_block_size < _M_current_index + bytes)
       {
-	++_M_block_index;
+        ++_M_block_index;
 
-	_M_storage = reinterpret_cast<char**>
-	  (::realloc(_M_storage, sizeof(char*) * (1 + _M_block_index)));
+        _M_storage = reinterpret_cast<char**>
+          (::realloc(_M_storage, sizeof(char*) * (1 + _M_block_index)));
 
-	_M_current_block = _M_storage[_M_block_index] = reinterpret_cast<char*>
-	  (new char[_S_block_size]);
+        _M_current_block = _M_storage[_M_block_index] = reinterpret_cast<char*>
+          (new char[_S_block_size]);
 
 #if defined(RXX_ALLOCATOR_INIT_0) // ### make it a policy
-	::memset(_M_current_block, 0, _S_block_size);
+        ::memset(_M_current_block, 0, _S_block_size);
 #endif
-	_M_current_index = 0;
+        _M_current_index = 0;
       }
 
     pointer p = reinterpret_cast<pointer>
       (_M_current_block + _M_current_index);
 
     _M_current_index += bytes;
+    // Hack for modern C++ to get aligned allocations
+    _M_current_index += 7U;
+    _M_current_index &= ~(7U);
 
     return p;
   }
 
-  void deallocate(pointer __p, size_type __n) {}
+  void deallocate(pointer /*__p*/, size_type /*__n*/) {}
 
   size_type max_size() const { return size_type(-1) / sizeof(_Tp); }
 
@@ -118,7 +121,7 @@ private:
     typedef rxx_allocator<_Tp1> other;
   };
 
-  template <class _Tp1> rxx_allocator(const rxx_allocator<_Tp1> &__o) {}
+  template <class _Tp1> rxx_allocator(const rxx_allocator<_Tp1> &/*__o*/) {}
 
 private:
   size_type _M_block_index;

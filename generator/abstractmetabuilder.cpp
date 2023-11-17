@@ -54,7 +54,9 @@
 #include <QtCore/QDebug>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
-#include <QtCore/QTextCodec>
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+#   include <QtCore/QTextCodec>
+#endif
 #include <QtCore/QTextStream>
 #include <QtCore/QVariant>
 
@@ -148,12 +150,17 @@ AbstractMetaBuilder::AbstractMetaBuilder()
 {
 }
 
+AbstractMetaBuilder::~AbstractMetaBuilder()
+{
+    qDeleteAll(m_meta_classes);
+}
+
 void AbstractMetaBuilder::checkFunctionModifications()
 {
     TypeDatabase *types = TypeDatabase::instance();
     SingleTypeEntryHash entryHash = types->entries();
     QList<TypeEntry *> entries = entryHash.values();
-    foreach (TypeEntry *entry, entries) {
+    for (TypeEntry *entry :  entries) {
         if (entry == 0)
             continue;
         if (!entry->isComplex() || entry->codeGeneration() == TypeEntry::GenerateNothing)
@@ -162,7 +169,7 @@ void AbstractMetaBuilder::checkFunctionModifications()
         ComplexTypeEntry *centry = static_cast<ComplexTypeEntry *>(entry);
         FunctionModificationList modifications = centry->functionModifications();
 
-        foreach (FunctionModification modification, modifications) {
+        for (FunctionModification modification :  modifications) {
             QString signature = modification.signature;
 
             QString name = signature.trimmed();
@@ -175,7 +182,7 @@ void AbstractMetaBuilder::checkFunctionModifications()
             AbstractMetaFunctionList functions = clazz->functions();
             bool found = false;
             QStringList possibleSignatures;
-            foreach (AbstractMetaFunction *function, functions) {
+            for (AbstractMetaFunction *function :  functions) {
                 if (function->minimalSignature() == signature && function->implementingClass() == clazz) {
                     found = true;
                     break;
@@ -358,34 +365,28 @@ void AbstractMetaBuilder::traverseBinaryArithmeticOperator(FunctionModelItem ite
 }
 
 void AbstractMetaBuilder::fixQObjectForScope(TypeDatabase *types,
-					 NamespaceModelItem scope)
+           NamespaceModelItem scope)
 {
-    foreach (ClassModelItem item, scope->classes()) {
+    for (ClassModelItem item :  scope->classes()) {
         QString qualified_name = item->qualifiedName().join("::");
         TypeEntry *entry = types->findType(qualified_name);
         if (entry) {
-	    if (isQObject(qualified_name) && entry->isComplex()) {
-                ((ComplexTypeEntry *) entry)->setQObject(true);
-	    }
-	}
+            if (isQObject(qualified_name) && entry->isComplex()) {
+                      ((ComplexTypeEntry *) entry)->setQObject(true);
+            }
+        }
     }
 
-    foreach (NamespaceModelItem item, scope->namespaceMap().values()) {
+    for (NamespaceModelItem item :  scope->namespaceMap().values()) {
         if (scope != item)
-	  fixQObjectForScope(types, item);
+            fixQObjectForScope(types, item);
     }
 }
-
-static bool class_less_than(AbstractMetaClass *a, AbstractMetaClass *b)
-{
-    return a->name() < b->name();
-}
-
 
 void AbstractMetaBuilder::sortLists()
 {
-   qSort(m_meta_classes.begin(), m_meta_classes.end(), class_less_than);
-   foreach (AbstractMetaClass *cls, m_meta_classes) {
+   m_meta_classes.sort();
+   for (AbstractMetaClass *cls :  m_meta_classes) {
         cls->sortFunctions();
    }
 }
@@ -400,11 +401,15 @@ bool AbstractMetaBuilder::build()
         return false;
 
     QTextStream stream(&file);
-    stream.setCodec(QTextCodec::codecForName("UTF-8"));
+#   if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+        stream.setCodec(QTextCodec::codecForName("UTF-8"));
+        /* Note required in Qt6: see the same call in asttoxml.cpp */
+#   endif
     QByteArray contents = stream.readAll().toUtf8();
     file.close();
 
     Control control;
+    control.setSkipFunctionBody(true);
     Parser p(&control);
     pool __pool;
 
@@ -425,14 +430,14 @@ bool AbstractMetaBuilder::build()
 
 
     // Start the generation...
-    foreach (ClassModelItem item, typeMap.values()) {
+    for (ClassModelItem item :  typeMap.values()) {
         AbstractMetaClass *cls = traverseClass(item);
         addAbstractMetaClass(cls);
     }
 
 
     QHash<QString, NamespaceModelItem> namespaceMap = m_dom->namespaceMap();
-    foreach (NamespaceModelItem item, namespaceMap.values()) {
+    for (NamespaceModelItem item :  namespaceMap.values()) {
         AbstractMetaClass *meta_class = traverseNamespace(item);
         if (meta_class)
             m_meta_classes << meta_class;
@@ -442,7 +447,7 @@ bool AbstractMetaBuilder::build()
     // Some trickery to support global-namespace enums...
     QHash<QString, EnumModelItem> enumMap = m_dom->enumMap();
     m_current_class = 0;
-    foreach (EnumModelItem item, enumMap) {
+    for (EnumModelItem item :  enumMap) {
         AbstractMetaEnum *meta_enum = traverseEnum(item, 0, QSet<QString>());
 
         if (meta_enum) {
@@ -479,7 +484,7 @@ bool AbstractMetaBuilder::build()
     // Go through all typedefs to see if we have defined any
     // specific typedefs to be used as classes.
     TypeAliasList typeAliases = m_dom->typeAliases();
-    foreach (TypeAliasModelItem typeAlias, typeAliases) {
+    for (TypeAliasModelItem typeAlias :  typeAliases) {
         AbstractMetaClass *cls = traverseTypeAlias(typeAlias);
         addAbstractMetaClass(cls);
     }
@@ -487,14 +492,14 @@ bool AbstractMetaBuilder::build()
 
 
 
-    foreach (AbstractMetaClass *cls, m_meta_classes) {
+    for (AbstractMetaClass *cls :  m_meta_classes) {
         if (!cls->isInterface() && !cls->isNamespace()) {
             setupInheritance(cls);
         }
     }
 
 
-    foreach (AbstractMetaClass *cls, m_meta_classes) {
+    for (AbstractMetaClass *cls :  m_meta_classes) {
         cls->fixFunctions();
 
         if (cls->typeEntry() == 0) {
@@ -511,7 +516,7 @@ bool AbstractMetaBuilder::build()
     }
 
     QList<TypeEntry *> entries = TypeDatabase::instance()->entries().values();
-    foreach (const TypeEntry *entry, entries) {
+    for (const TypeEntry *entry :  entries) {
         if (entry->isPrimitive())
             continue;
 
@@ -547,25 +552,26 @@ bool AbstractMetaBuilder::build()
 
     {
         FunctionList hash_functions = m_dom->findFunctions("qHash");
-        foreach (FunctionModelItem item, hash_functions) {
+        for (FunctionModelItem item :  hash_functions) {
             registerHashFunction(item);
         }
     }
 
     {
         FunctionList hash_functions = m_dom->findFunctions("operator<<");
-        foreach (FunctionModelItem item, hash_functions) {
+        for (FunctionModelItem item :  hash_functions) {
             registerToStringCapability(item);
         }
     }
 
     {
         FunctionList compare_operators = m_dom->findFunctions("operator==")
+                                         + m_dom->findFunctions("operator!=")
                                          + m_dom->findFunctions("operator<=")
                                          + m_dom->findFunctions("operator>=")
                                          + m_dom->findFunctions("operator<")
                                          + m_dom->findFunctions("operator>");
-        foreach (FunctionModelItem item, compare_operators) {
+        for (FunctionModelItem item :  compare_operators) {
             traverseCompareOperator(item);
         }
     }
@@ -576,13 +582,13 @@ bool AbstractMetaBuilder::build()
         + m_dom->findFunctions("operator/") + m_dom->findFunctions("operator*")
         + m_dom->findFunctions("operator&") + m_dom->findFunctions("operator|")
         + m_dom->findFunctions("operator%") + m_dom->findFunctions("operator^");
-      foreach (FunctionModelItem item, stream_operators) {
+      for (FunctionModelItem item :  stream_operators) {
         traverseBinaryArithmeticOperator(item);
       }
     }
     {
         FunctionList stream_operators = m_dom->findFunctions("operator<<") + m_dom->findFunctions("operator>>");
-        foreach (FunctionModelItem item, stream_operators) {
+        for (FunctionModelItem item :  stream_operators) {
             traverseStreamOperator(item);
         }
     }
@@ -590,7 +596,7 @@ bool AbstractMetaBuilder::build()
     figureOutEnumValues();
     checkFunctionModifications();
 
-    foreach (AbstractMetaClass *cls, m_meta_classes) {
+    for (AbstractMetaClass *cls :  m_meta_classes) {
         setupEquals(cls);
         setupComparable(cls);
         setupClonable(cls);
@@ -611,7 +617,15 @@ void AbstractMetaBuilder::addAbstractMetaClass(AbstractMetaClass *cls)
 
     cls->setOriginalAttributes(cls->attributes());
     if (cls->typeEntry()->isContainer()) {
-        m_templates << cls;
+        QString name = cls->typeEntry()->name();
+        if (cls->functions().size() || cls->baseClassNames().size()) {
+            if (!m_templates.contains(name)) {
+                m_templates[name] = cls;
+            }
+            else {
+                ReportHandler::warning(QString("Duplicate container type template '%1'").arg(name));
+            }
+        }
     } else {
         m_meta_classes << cls;
         if (cls->typeEntry()->designatedInterface()) {
@@ -659,7 +673,7 @@ AbstractMetaClass *AbstractMetaBuilder::traverseNamespace(NamespaceModelItem nam
 
 
     ClassList classes = namespace_item->classes();
-    foreach (ClassModelItem cls, classes) {
+    for (ClassModelItem cls :  classes) {
         AbstractMetaClass *mjc = traverseClass(cls);
         addAbstractMetaClass(mjc);
     }
@@ -667,7 +681,7 @@ AbstractMetaClass *AbstractMetaBuilder::traverseNamespace(NamespaceModelItem nam
     // Go through all typedefs to see if we have defined any
     // specific typedefs to be used as classes.
     TypeAliasList typeAliases = namespace_item->typeAliases();
-    foreach (TypeAliasModelItem typeAlias, typeAliases) {
+    for (TypeAliasModelItem typeAlias :  typeAliases) {
         AbstractMetaClass *cls = traverseTypeAlias(typeAlias);
         addAbstractMetaClass(cls);
     }
@@ -676,7 +690,7 @@ AbstractMetaClass *AbstractMetaBuilder::traverseNamespace(NamespaceModelItem nam
 
     // Traverse namespaces recursively
     QList<NamespaceModelItem> inner_namespaces = namespace_item->namespaceMap().values();
-    foreach (const NamespaceModelItem &ni, inner_namespaces) {
+    for (const NamespaceModelItem &ni :  inner_namespaces) {
         AbstractMetaClass *mjc = traverseNamespace(ni);
         addAbstractMetaClass(mjc);
     }
@@ -746,6 +760,7 @@ int AbstractMetaBuilder::figureOutEnumValue(const QString &stringValue,
                                         AbstractMetaEnum *meta_enum,
                                         AbstractMetaFunction *meta_function)
 {
+    Q_UNUSED(meta_function)
     if (stringValue.isEmpty())
         return oldValuevalue;
 
@@ -832,7 +847,7 @@ void AbstractMetaBuilder::figureOutEnumValuesForClass(AbstractMetaClass *meta_cl
         return;
 
     AbstractMetaEnumList enums = meta_class->enums();
-    foreach (AbstractMetaEnum *e, enums) {
+    for (AbstractMetaEnum *e :  enums) {
         if (!e) {
             ReportHandler::warning("bad enum in class " + meta_class->name());
             continue;
@@ -849,7 +864,7 @@ void AbstractMetaBuilder::figureOutEnumValuesForClass(AbstractMetaClass *meta_cl
         EnumTypeEntry *ete = e->typeEntry();
         if (!ete->forceInteger()) {
             QHash<int, AbstractMetaEnumValue *> entries;
-            foreach (AbstractMetaEnumValue *v, lst) {
+            for (AbstractMetaEnumValue *v :  lst) {
 
                 bool vRejected = ete->isEnumValueRejected(v->name());
 
@@ -877,7 +892,7 @@ void AbstractMetaBuilder::figureOutEnumValuesForClass(AbstractMetaClass *meta_cl
 
             // Entries now contain all the original entries, no
             // rejected ones... Use this to generate the enumValueRedirection table.
-            foreach (AbstractMetaEnumValue *reject, lst) {
+            for (AbstractMetaEnumValue *reject :  lst) {
                 if (!ete->isEnumValueRejected(reject->name()))
                     continue;
 
@@ -906,7 +921,7 @@ void AbstractMetaBuilder::figureOutEnumValues()
     // Keep a set of classes that we already traversed. We use this to
     // enforce that we traverse base classes prior to subclasses.
     QSet<AbstractMetaClass *> classes;
-    foreach (AbstractMetaClass *c, m_meta_classes) {
+    for (AbstractMetaClass *c :  m_meta_classes) {
         figureOutEnumValuesForClass(c, &classes);
     }
 }
@@ -957,7 +972,7 @@ AbstractMetaEnum *AbstractMetaBuilder::traverseEnum(EnumModelItem enum_item, Abs
 
     ReportHandler::debugMedium(QString(" - traversing enum %1").arg(meta_enum->fullName()));
 
-    foreach (EnumeratorModelItem value, enum_item->enumerators()) {
+    for (EnumeratorModelItem value :  enum_item->enumerators()) {
         if (meta_enum->typeEntry()->isEnumValueRejected(value->name())) {
           continue;
         }
@@ -969,7 +984,7 @@ AbstractMetaEnum *AbstractMetaBuilder::traverseEnum(EnumModelItem enum_item, Abs
         meta_enum->addEnumValue(meta_enum_value);
 
         ReportHandler::debugFull("   - " + meta_enum_value->name() + " = "
-                                 + meta_enum_value->value());
+                                 + QString::number(meta_enum_value->value()));
 
         // Add into global register...
         if (enclosing)
@@ -1089,6 +1104,7 @@ AbstractMetaClass *AbstractMetaBuilder::traverseClass(ClassModelItem class_item)
         template_args.append(param_type);
     }
     meta_class->setTemplateArguments(template_args);
+    meta_class->setHasActualDeclaration(class_item->hasActualDeclaration());
 
     parseQ_Property(meta_class, class_item->propertyDeclarations());
 
@@ -1099,7 +1115,7 @@ AbstractMetaClass *AbstractMetaBuilder::traverseClass(ClassModelItem class_item)
     // Inner classes
     {
         QList<ClassModelItem> inner_classes = class_item->classMap().values();
-        foreach (const ClassModelItem &ci, inner_classes) {
+        for (const ClassModelItem &ci :  inner_classes) {
             AbstractMetaClass *cl = traverseClass(ci);
             if (cl) {
                 cl->setEnclosingClass(meta_class);
@@ -1112,7 +1128,7 @@ AbstractMetaClass *AbstractMetaBuilder::traverseClass(ClassModelItem class_item)
     // Go through all typedefs to see if we have defined any
     // specific typedefs to be used as classes.
     TypeAliasList typeAliases = class_item->typeAliases();
-    foreach (TypeAliasModelItem typeAlias, typeAliases) {
+    for (TypeAliasModelItem typeAlias :  typeAliases) {
         AbstractMetaClass *cls = traverseTypeAlias(typeAlias);
         if (cls != 0) {
             cls->setEnclosingClass(meta_class);
@@ -1123,8 +1139,9 @@ AbstractMetaClass *AbstractMetaBuilder::traverseClass(ClassModelItem class_item)
 
     m_current_class = old_current_class;
 
-    // Set the default include file name
-    if (!type->include().isValid()) {
+    // Set the default include file name. In case we saw an template instance earlier,
+    // overwrite the include file when we see the actual declaration.
+    if (!type->include().isValid() || class_item->hasActualDeclaration()) {
         QFileInfo info(class_item->fileName());
         type->setInclude(Include(Include::IncludePath, info.fileName()));
     }
@@ -1187,7 +1204,7 @@ AbstractMetaField *AbstractMetaBuilder::traverseField(VariableModelItem field, c
 
 void AbstractMetaBuilder::traverseFields(ScopeModelItem scope_item, AbstractMetaClass *meta_class)
 {
-    foreach (VariableModelItem field, scope_item->variables()) {
+    for (VariableModelItem field :  scope_item->variables()) {
         AbstractMetaField *meta_field = traverseField(field, meta_class);
 
         if (meta_field) {
@@ -1218,7 +1235,7 @@ void AbstractMetaBuilder::setupFunctionDefaults(AbstractMetaFunction *meta_funct
 
 void AbstractMetaBuilder::traverseFunctions(ScopeModelItem scope_item, AbstractMetaClass *meta_class)
 {
-    foreach (FunctionModelItem function, scope_item->functions()) {
+    for (FunctionModelItem function :  scope_item->functions()) {
         AbstractMetaFunction *meta_function = traverseFunction(function);
 
         if (meta_function) {
@@ -1236,7 +1253,7 @@ void AbstractMetaBuilder::traverseFunctions(ScopeModelItem scope_item, AbstractM
                 }
             } else if (QPropertySpec *write =
                        meta_class->propertySpecForWrite(meta_function->name())) {
-                if (write->type() == meta_function->arguments().at(0)->type()->typeEntry()) {
+                if (meta_function->arguments().size() == 1 && write->type() == meta_function->arguments().at(0)->type()->typeEntry()) {
                     *meta_function += AbstractMetaAttributes::PropertyWriter;
                     meta_function->setPropertySpec(write);
 //                     printf("%s is writer for %s\n",
@@ -1302,6 +1319,7 @@ void AbstractMetaBuilder::traverseFunctions(ScopeModelItem scope_item, AbstractM
                 if (!meta_function->isPublic()) {
                   meta_class->setHasPublicDestructor(false);
                 }
+                meta_class->setHasVirtualDestructor(meta_function->isVirtual());
             }
         }
     }
@@ -1329,13 +1347,7 @@ bool AbstractMetaBuilder::setupInheritance(AbstractMetaClass *meta_class)
             TypeParser::Info info = TypeParser::parse(complete_name);
             QString base_name = info.qualified_name.join("::");
 
-            AbstractMetaClass *templ = 0;
-            foreach (AbstractMetaClass *c, m_templates) {
-                if (c->typeEntry()->name() == base_name) {
-                    templ = c;
-                    break;
-                }
-            }
+            AbstractMetaClass *templ = m_templates.value(base_name);
 
             if (templ == 0)
                 templ = m_meta_classes.findClass(base_name);
@@ -1406,8 +1418,11 @@ bool AbstractMetaBuilder::setupInheritance(AbstractMetaClass *meta_class)
         if (types->isClassRejected(base_classes.at(i)))
             continue;
 
+        AbstractMetaClass *base_class = m_meta_classes.findClass(base_classes.at(i));
+        if (base_class) {
+            meta_class->addSuperClass(base_class);
+        }
         if (i != primary) {
-            AbstractMetaClass *base_class = m_meta_classes.findClass(base_classes.at(i));
             if (base_class == 0) {
                 ReportHandler::warning(QString("class not found for setup inheritance '%1'").arg(base_classes.at(i)));
                 return false;
@@ -1426,7 +1441,7 @@ bool AbstractMetaBuilder::setupInheritance(AbstractMetaClass *meta_class)
             meta_class->addInterface(iface);
 
             AbstractMetaClassList interfaces = iface->interfaces();
-            foreach (AbstractMetaClass *iface, interfaces)
+            for (AbstractMetaClass *iface :  interfaces)
                 meta_class->addInterface(iface);
         }
     }
@@ -1437,8 +1452,14 @@ bool AbstractMetaBuilder::setupInheritance(AbstractMetaClass *meta_class)
 void AbstractMetaBuilder::traverseEnums(ScopeModelItem scope_item, AbstractMetaClass *meta_class, const QStringList &enumsDeclarations)
 {
     EnumList enums = scope_item->enums();
-    foreach (EnumModelItem enum_item, enums) {
-        AbstractMetaEnum *meta_enum = traverseEnum(enum_item, meta_class, QSet<QString>::fromList(enumsDeclarations));
+    for (EnumModelItem enum_item :  enums) {
+        AbstractMetaEnum *meta_enum = traverseEnum(enum_item, meta_class,
+#if QT_VERSION < QT_VERSION_CHECK(5,14,0)
+            QSet<QString>::fromList(enumsDeclarations)
+#else
+            QSet<QString>(enumsDeclarations.begin(), enumsDeclarations.end())
+#endif
+        );
         if (meta_enum) {
             meta_enum->setOriginalAttributes(meta_enum->attributes());
             meta_class->addEnum(meta_enum);
@@ -1470,6 +1491,25 @@ AbstractMetaFunction *AbstractMetaBuilder::traverseFunction(FunctionModelItem fu
       return 0;
     }
 
+    // Also filter out functions with template parameters in classes without template arguments
+    // (we don't support templated classes directly, but derived classes might derive from template instantiations)
+    if (function_item->templateParameters().size() && m_current_class->templateArguments().empty()) {
+      return 0;
+    }
+
+    if (function_item->isAuto()) {
+        /*TODO: it might work just to output 'auto', but this would require
+         * understanding what AbstractMetabuild::translateType() does and
+         * changing it.  auto is only used once anyway.
+         */
+        ReportHandler::warning(QString("%1: skipping auto function type '%2'")
+                .arg(function_name)
+                .arg(function_item->type().toString()));
+        m_rejected_functions[class_name + "::" + function_name + " " + function_item->type().toString()] =
+                UnmatchedReturnType;
+        return 0;
+    }
+
     QString cast_type;
 
     if (function_name.startsWith("operator")) {
@@ -1485,6 +1525,8 @@ AbstractMetaFunction *AbstractMetaBuilder::traverseFunction(FunctionModelItem fu
 
     AbstractMetaFunction *meta_function = createMetaFunction();
     meta_function->setConstant(function_item->isConstant());
+    meta_function->setConstexpr(function_item->isConstexpr());
+    meta_function->setAuto(function_item->isAuto());
     meta_function->setException(function_item->exception());
 
     ReportHandler::debugMedium(QString(" - %2()").arg(function_name));
@@ -1562,6 +1604,11 @@ AbstractMetaFunction *AbstractMetaBuilder::traverseFunction(FunctionModelItem fu
             meta_function->setFunctionType(AbstractMetaFunction::SlotFunction);
     }
 
+    if (function_item->isDeleted()) {
+      meta_function->setInvalid(true);
+      return meta_function;
+    }
+
     ArgumentList arguments = function_item->arguments();
     AbstractMetaArgumentList meta_arguments;
 
@@ -1619,12 +1666,15 @@ AbstractMetaFunction *AbstractMetaBuilder::traverseFunction(FunctionModelItem fu
 
     // If we where not able to translate the default argument make it
     // reset all default arguments before this one too.
-    for (int i=0; i<first_default_argument; ++i)
+    for (int i=0; i<first_default_argument; ++i) {
         meta_arguments[i]->setDefaultValueExpression(QString());
+    }
 
-    if (ReportHandler::debugLevel() == ReportHandler::FullDebug)
-        foreach(AbstractMetaArgument *arg, meta_arguments)
+    if (ReportHandler::debugLevel() == ReportHandler::FullDebug) {
+        for (AbstractMetaArgument *arg :  meta_arguments) {
             ReportHandler::debugFull("   - " + arg->toString());
+        }
+    }
 
     return meta_function;
 }
@@ -1662,7 +1712,7 @@ AbstractMetaType *AbstractMetaBuilder::translateType(const TypeInfo &_typei, boo
 
     }
 
-    if (typei.isFunctionPointer()) {
+    if (typei.isFunctionPointer() || typei.isRvalueReference()) { // function pointers or r-value references are not supported
         *ok = false;
         return 0;
     }
@@ -1685,10 +1735,12 @@ AbstractMetaType *AbstractMetaBuilder::translateType(const TypeInfo &_typei, boo
             //newInfo.setArguments(typei.arguments());
             newInfo.setIndirections(typei.indirections());
             newInfo.setConstant(typei.isConstant());
+            newInfo.setConstexpr(typei.isConstexpr());
             newInfo.setFunctionPointer(typei.isFunctionPointer());
             newInfo.setQualifiedName(typei.qualifiedName());
             newInfo.setReference(typei.isReference());
             newInfo.setVolatile(typei.isVolatile());
+            newInfo.setMutable(typei.isMutable());
 
             AbstractMetaType *elementType = translateType(newInfo, ok);
             if (!(*ok))
@@ -1751,7 +1803,7 @@ AbstractMetaType *AbstractMetaBuilder::translateType(const TypeInfo &_typei, boo
     //    of the parameters.
     if (type == 0 && m_current_class != 0) {
         QList<TypeEntry *> template_args = m_current_class->templateArguments();
-        foreach (TypeEntry *te, template_args) {
+        for (TypeEntry *te :  template_args) {
             if (te->name() == qualified_name)
                 type = te;
         }
@@ -1825,7 +1877,7 @@ AbstractMetaType *AbstractMetaBuilder::translateType(const TypeInfo &_typei, boo
             meta_type->setInstantiationInCpp(false);
 
         } else {
-            foreach (const TypeParser::Info &ta, typeInfo.template_instantiations) {
+            for (const TypeParser::Info &ta :  typeInfo.template_instantiations) {
                 TypeInfo info;
                 info.setConstant(ta.is_constant);
                 info.setReference(ta.is_reference);
@@ -1944,6 +1996,7 @@ QString AbstractMetaBuilder::translateDefaultValue(ArgumentModelItem item, Abstr
                                                AbstractMetaFunction *fnc, AbstractMetaClass *implementing_class,
                                                int argument_index)
 {
+    Q_UNUSED(type)
     QString function_name = fnc->name();
     QString class_name = implementing_class->name();
 
@@ -2050,7 +2103,7 @@ bool AbstractMetaBuilder::inheritTemplate(AbstractMetaClass *subclass,
     QList<TypeParser::Info> targs = info.template_instantiations;
 
     QList<AbstractMetaType *> template_types;
-    foreach (const TypeParser::Info &i, targs) {
+    for (const TypeParser::Info &i :  targs) {
         TypeEntry *t = TypeDatabase::instance()->findType(i.qualified_name.join("::"));
 
         if (t != 0) {
@@ -2064,7 +2117,7 @@ bool AbstractMetaBuilder::inheritTemplate(AbstractMetaClass *subclass,
     }
 
     AbstractMetaFunctionList funcs = subclass->functions();
-    foreach (const AbstractMetaFunction *function, template_class->functions()) {
+    for (const AbstractMetaFunction *function :  template_class->functions()) {
 
         if (function->isModifiedRemoved(TypeSystem::All))
             continue;
@@ -2080,7 +2133,7 @@ bool AbstractMetaBuilder::inheritTemplate(AbstractMetaClass *subclass,
             continue;
         }
 
-        foreach (AbstractMetaArgument *argument, function->arguments()) {
+        for (AbstractMetaArgument *argument :  function->arguments()) {
             AbstractMetaType *atype = argument->type();
 
             AbstractMetaArgument *arg = argument->copy();
@@ -2154,7 +2207,7 @@ bool AbstractMetaBuilder::inheritTemplate(AbstractMetaClass *subclass,
     }
 
     // Clean up
-    foreach (AbstractMetaType *type, template_types) {
+    for (AbstractMetaType *type :  template_types) {
         delete type;
     }
 
@@ -2221,7 +2274,7 @@ void AbstractMetaBuilder::parseQ_Property(AbstractMetaClass *meta_class, const Q
 }
 
 static void hide_functions(const AbstractMetaFunctionList &l) {
-    foreach (AbstractMetaFunction *f, l) {
+    for (AbstractMetaFunction *f :  l) {
         FunctionModification mod;
         mod.signature = f->minimalSignature();
         mod.modifiers = FunctionModification::Private;
@@ -2239,7 +2292,7 @@ static void remove_function(AbstractMetaFunction *f) {
 static AbstractMetaFunctionList filter_functions(const AbstractMetaFunctionList &lst, QSet<QString> *signatures)
 {
     AbstractMetaFunctionList functions;
-    foreach (AbstractMetaFunction *f, lst) {
+    for (AbstractMetaFunction *f :  lst) {
         QString signature = f->minimalSignature();
         int start = signature.indexOf(QLatin1Char('(')) + 1;
         int end = signature.lastIndexOf(QLatin1Char(')'));
@@ -2264,7 +2317,7 @@ void AbstractMetaBuilder::setupEquals(AbstractMetaClass *cls)
 
     AbstractMetaFunctionList functions = cls->queryFunctions(AbstractMetaClass::ClassImplements
                                                          | AbstractMetaClass::NotRemovedFromTargetLang);
-    foreach (AbstractMetaFunction *f, functions) {
+    for (AbstractMetaFunction *f :  functions) {
         if (f->name() == op_equals)
             equals << f;
         else if (f->name() == op_nequals)
@@ -2303,7 +2356,7 @@ void AbstractMetaBuilder::setupComparable(AbstractMetaClass *cls)
 
     AbstractMetaFunctionList functions = cls->queryFunctions(AbstractMetaClass::ClassImplements
                                                          | AbstractMetaClass::NotRemovedFromTargetLang);
-    foreach (AbstractMetaFunction *f, functions) {
+    for (AbstractMetaFunction *f :  functions) {
         if (f->name() == op_greater)
             greater << f;
         else if (f->name() == op_greater_eq)
@@ -2364,7 +2417,7 @@ void AbstractMetaBuilder::setupClonable(AbstractMetaClass *cls)
     QString op_assign = QLatin1String("operator_assign");
 
     AbstractMetaFunctionList functions = cls->queryFunctions(AbstractMetaClass::ClassImplements);
-    foreach (AbstractMetaFunction *f, functions) {
+    for (AbstractMetaFunction *f :  functions) {
         if ((f->name() == op_assign || f->isConstructor()) && f->isPublic()) {
             AbstractMetaArgumentList arguments = f->arguments();
             if (arguments.size() == 1) {
@@ -2448,55 +2501,112 @@ void AbstractMetaBuilder::dumpLog()
 
 AbstractMetaClassList AbstractMetaBuilder::classesTopologicalSorted() const
 {
-    AbstractMetaClassList res;
+    /* This function is the standard topological sort of a Directed Acyclic
+     * Graph (a DAG).  It outputs a partially ordered list of the nodes in the
+     * graph such that a node is output after all of its children.
+     *
+     * In the previous implementation it seemed to account for around 68-69% of
+     * the entire run time of pythonqt_generator however this might be an
+     * artefact of the profiling technique used as these changes make not
+     * significant difference to the run time of the generator.
+     *
+     * However the previous implementation also leaked memory and  modified a
+     * QHash while iterating over it with a QHashIterator; a potentially fatal
+     * "use after free".
+     *
+     * This version is somewhat like the python equivalent using list
+     * comprehensions.
+     */
 
-    AbstractMetaClassList classes = m_meta_classes;
-    qSort(classes);
+    /* Build a hash list of QSet<class> for each class.  'class' is represented
+     * by a pointer to the AbstractMetaClass from m_meta_classes.
+     */
+    ReportHandler::debugSparse(QString("TSORT: %1 meta classes")
+            .arg(m_meta_classes.count()));
+    QHash<AbstractMetaClass*, QSet<AbstractMetaClass*>> classes;
+    classes.reserve(m_meta_classes.count());
 
-    QSet<AbstractMetaClass*> noDependency;
-    QHash<AbstractMetaClass*, QSet<AbstractMetaClass* >* > hash;
-    foreach (AbstractMetaClass *cls, classes) {
-        QSet<AbstractMetaClass* > *depends = new QSet<AbstractMetaClass* >();
+    for (auto cls : m_meta_classes) {
+        /* Add the baseClass and the interfaces the class uses.  The latter
+         * are stored in an AbstractMetaClassList which is uses a QList, so:
+         */
+        auto entry(classes.insert(cls,
+#           if QT_VERSION < QT_VERSION_CHECK(5,14,0)
+                QSet<AbstractMetaClass*>::fromList(cls->interfaces())
+#           else
+                QSet<AbstractMetaClass*>(cls->interfaces().cbegin(),
+                        cls->interfaces().cend())
+#           endif
+        ));
 
         if (cls->baseClass())
-            depends->insert(cls->baseClass());
-
-        foreach (AbstractMetaClass *interface, cls->interfaces()) {
-            AbstractMetaClass *impl = interface->primaryInterfaceImplementor();
-            if (impl == cls)
-                continue;
-            depends->insert(impl);
-        }
-
-        if (depends->empty()) {
-            noDependency.insert(cls);
-        } else {
-            hash.insert(cls, depends);
-        }
+            entry.value().insert(cls->baseClass());
+        entry.value().remove(cls); // may come from interfaces
     }
 
-    while (!noDependency.empty()) {
-        foreach (AbstractMetaClass *cls, noDependency.values()) {
-            if(!cls->isInterface())
-                res.append(cls);
-            noDependency.remove(cls);
-            QHashIterator<AbstractMetaClass*, QSet<AbstractMetaClass* >* > i(hash);
-            while (i.hasNext()) {
-                i.next();
-                i.value()->remove(cls);
-                if (i.value()->empty()) {
-                    AbstractMetaClass *key = i.key();
-                    noDependency.insert(key);
-                    hash.remove(key);
-                    delete(i.value());
-                }
-            }
+    /* This and the qFatals below are fatal internal errors in the code of
+     * pythonqt_generator.
+     */
+    if (m_meta_classes.count() != classes.count())
+        qFatal("TOPO SORT: duplicate meta classes (%lld != %lld)",
+                static_cast<long long>(m_meta_classes.count()),
+                static_cast<long long>(classes.count()));
+
+    /* Loop: output all the classes with no remaining dependencies to the
+     * result and then also remove those now output classes from the remaining
+     * classes in the hash table.
+     */
+    AbstractMetaClassList result;
+    result.reserve(classes.count());
+    QSet<AbstractMetaClass *> handled;
+    handled.reserve(classes.count());
+    int interfaceClasses(0), depthFromLeaf(0);
+
+    while (!classes.empty()) {
+        handled.clear();
+        int iFCount(0);
+
+        /* Output classes where all children have already been output (initially
+         * the leaf nodes):
+         */
+        for (auto i(classes.cbegin()); i != classes.cend(); ++i)
+            if (i.value().empty())
+                handled.insert(i.key());
+
+        /* Something must have been done; if not this is not a DAG because
+         * there is a cycle.
+         */
+        if (handled.empty())
+            qFatal("TOPOSORT: %lld cyclic meta classes @depth %d.",
+                    static_cast<long long>(classes.count()), depthFromLeaf);
+
+        /* Remove all 'handled' from the hash table. */
+        for (auto cls : handled)
+            if (!classes.remove(cls))
+                qFatal("TOPO SORT: class remove failed @depth %d.",
+                        depthFromLeaf);
+
+        /* Then remove the 'handled' set from the classes values: */
+        for (QSet<AbstractMetaClass*> &set : classes)
+            set -= handled;
+
+        /* Output only those handled classes there are not interfaces: */
+        for (auto cls : handled) {
+            if (!cls->isInterface())
+                result.append(cls);
+            else
+                ++iFCount;
         }
+
+        ReportHandler::debugSparse(
+                QString("TSORT: depth %1: %2 classes (%3 interface)")
+                .arg(depthFromLeaf).arg(handled.count()).arg(iFCount));
+        interfaceClasses += iFCount;
+        ++depthFromLeaf;
     }
 
-    if (!noDependency.empty() || !hash.empty()) {
-        qWarning("dependency graph was cyclic.");
-    }
-
-    return res;
+    ReportHandler::debugSparse(QString(
+                "TSORT: %1 result classes, %2 interface classes)")
+                .arg(result.count()).arg(interfaceClasses));
+    return result;
 }

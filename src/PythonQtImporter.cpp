@@ -128,7 +128,7 @@ PythonQtImport::ModuleInfo PythonQtImport::getModuleInfo(PythonQtImporter* self,
 */
 int PythonQtImporter_init(PythonQtImporter *self, PyObject *args, PyObject * /*kwds*/)
 {
-  self->_path = NULL;
+  self->_path = nullptr;
 
   const char* cpath;
   if (!PyArg_ParseTuple(args, "s",
@@ -177,12 +177,12 @@ PyObject *
 PythonQtImporter_find_module(PyObject *obj, PyObject *args)
 {
   PythonQtImporter *self = (PythonQtImporter *)obj;
-  PyObject *path = NULL;
+  PyObject *path = nullptr;
   char *fullname;
 
   if (!PyArg_ParseTuple(args, "s|O:PythonQtImporter.find_module",
             &fullname, &path))
-    return NULL;
+    return nullptr;
 
   //qDebug() << "looking for " << fullname << " at " << *self->_path;
 
@@ -205,7 +205,7 @@ PythonQtImporter_iter_modules(PyObject *obj, PyObject *args)
   const char* prefix;
   if (!PyArg_ParseTuple(args, "|s",
     &prefix)) {
-    return NULL;
+    return nullptr;
   }
   PythonQtImporter *self = (PythonQtImporter *)obj;
   PythonQtObjectPtr pkgutil = PythonQt::self()->importModule("pkgutil");
@@ -221,36 +221,37 @@ PyObject *
 PythonQtImporter_load_module(PyObject *obj, PyObject *args)
 {
   PythonQtImporter *self = (PythonQtImporter *)obj;
-  PyObject *code = NULL, *mod = NULL, *dict = NULL;
-  char *fullname;
+  PyObject *code = nullptr, *mod = nullptr, *dict = nullptr;
+  char *fullname = NULL;
 
-  if (!PyArg_ParseTuple(args, "s:PythonQtImporter.load_module", &fullname)) {
-    return NULL;
-  }
+  if (!PyArg_ParseTuple(args, "s:PythonQtImporter.load_module",
+            &fullname))
+    return nullptr;
 
   PythonQtImport::ModuleInfo info = PythonQtImport::getModuleInfo(self, fullname);
   if (info.type == PythonQtImport::MI_NOT_FOUND) {
-    return NULL;
+    return nullptr;
   }
 
   if (info.type == PythonQtImport::MI_PACKAGE || info.type == PythonQtImport::MI_MODULE) {
     QString fullPath;
     QString fullCachePath;
     code = PythonQtImport::getModuleCode(self, fullname, fullPath, fullCachePath);
-    if (code == NULL) {
-      return NULL;
+    if (code == nullptr) {
+      return nullptr;
     }
 
     mod = PyImport_AddModule(fullname);
-    if (mod == NULL) {
+    if (mod == nullptr) {
       Py_DECREF(code);
-      return NULL;
+      return nullptr;
     }
     dict = PyModule_GetDict(mod);
 
     if (PyDict_SetItemString(dict, "__loader__", (PyObject *)self) != 0) {
       Py_DECREF(code);
-      return NULL;
+      Py_DECREF(mod);
+      return nullptr;
     }
 
     if (info.type == PythonQtImport::MI_PACKAGE) {
@@ -262,22 +263,25 @@ PythonQtImporter_load_module(PyObject *obj, PyObject *args)
                                      QStringToPythonConstCharPointer(*self->_path),
                                      SEP,
                                      QStringToPythonConstCharPointer(subname));
-      if (fullpath == NULL) {
+      if (fullpath == nullptr) {
         Py_DECREF(code);
-        return NULL;
+        Py_DECREF(mod);
+        return nullptr;
       }
 
       pkgpath = Py_BuildValue("[O]", fullpath);
       Py_DECREF(fullpath);
-      if (pkgpath == NULL) {
+      if (pkgpath == nullptr) {
         Py_DECREF(code);
-        return NULL;
+        Py_DECREF(mod);
+        return nullptr;
       }
       err = PyDict_SetItemString(dict, "__path__", pkgpath);
       Py_DECREF(pkgpath);
       if (err != 0) {
         Py_DECREF(code);
-        return NULL;
+        Py_DECREF(mod);
+        return nullptr;
       }
 
       // set __package__ only for Python 3, because in Python 2 it causes the exception "__package__ set to non-string"
@@ -285,12 +289,11 @@ PythonQtImporter_load_module(PyObject *obj, PyObject *args)
       // The package attribute is needed to resolve the package name if it is referenced as '.'. For example,
       // when importing the encodings package, there is an import statement 'from . import aliases'. This import
       // would fail when reloading the encodings package with importlib.
-      PyObject* fullnameObj = PyUnicode_FromString(fullname);
-      err = PyDict_SetItemString(dict, "__package__", fullnameObj);
-      Py_XDECREF(fullnameObj);
+      err = PyDict_SetItemString(dict, "__package__", PyUnicode_FromString(fullname));
       if (err != 0) {
         Py_DECREF(code);
-        return NULL;
+        Py_DECREF(mod);
+        return nullptr;
       }
 #endif
     }
@@ -298,7 +301,7 @@ PythonQtImporter_load_module(PyObject *obj, PyObject *args)
 #ifdef PY3K
     PyObject* fullnameObj = PyUnicode_FromString(fullname);
     PyObject* fullPathObj = PythonQtConv::QStringToPyObject(fullPath);
-    PyObject* fullCachePathObj = !fullCachePath.isEmpty() ? PythonQtConv::QStringToPyObject(fullCachePath) : NULL;
+    PyObject* fullCachePathObj = !fullCachePath.isEmpty() ? PythonQtConv::QStringToPyObject(fullCachePath) : nullptr;
     mod = PyImport_ExecCodeModuleObject(fullnameObj, code, fullPathObj, fullCachePathObj);
     Py_XDECREF(fullnameObj);
     Py_XDECREF(fullPathObj);
@@ -335,7 +338,7 @@ PythonQtImporter_load_module(PyObject *obj, PyObject *args)
       QVariantList list = result.toList();
       if (list.count()==3) {
         // We prepend the full module name (including package prefix)
-        list.prepend(fullname);
+        list.prepend(QString(fullname));
 #ifdef __linux
   #ifdef _DEBUG
         // imp_find_module() does not respect the debug suffix '_d' on Linux,
@@ -369,7 +372,7 @@ PyObject *
 PythonQtImporter_get_data(PyObject* /*obj*/, PyObject* /*args*/)
 {
   // EXTRA, NOT YET IMPLEMENTED
-  return NULL;
+  return nullptr;
 }
 
 PyObject *
@@ -379,7 +382,7 @@ PythonQtImporter_get_code(PyObject *obj, PyObject *args)
   char *fullname;
 
   if (!PyArg_ParseTuple(args, "s:PythonQtImporter.get_code", &fullname))
-    return NULL;
+    return nullptr;
 
   QString notused;
   QString notused2;
@@ -390,7 +393,7 @@ PyObject *
 PythonQtImporter_get_source(PyObject * /*obj*/, PyObject * /*args*/)
 {
   // EXTRA, NOT YET IMPLEMENTED
-  return NULL;
+  return nullptr;
 }
 
 PyDoc_STRVAR(doc_find_module,
@@ -444,7 +447,7 @@ PyMethodDef PythonQtImporter_methods[] = {
    doc_get_code},
   {"get_source", PythonQtImporter_get_source, METH_VARARGS,
    doc_get_source},
-  {NULL,    NULL, 0 , NULL} /* sentinel */
+  {nullptr,    nullptr, 0 , nullptr} /* sentinel */
 };
 
 
@@ -454,48 +457,48 @@ PyDoc_STRVAR(PythonQtImporter_doc,
 Create a new PythonQtImporter instance. 'path' must be a valid path on disk/or inside of a zip file known to MeVisLab\n\
 . Every path is accepted.");
 
-#define DEFERRED_ADDRESS(ADDR) 0
+#define DEFERRED_ADDRESS(ADDR) nullptr
 
 PyTypeObject PythonQtImporter_Type = {
   PyVarObject_HEAD_INIT(DEFERRED_ADDRESS(&PyType_Type), 0)
   "PythonQtImport.PythonQtImporter",
   sizeof(PythonQtImporter),
-  0,          /* tp_itemsize */
+  0,                        /* tp_itemsize */
   (destructor)PythonQtImporter_dealloc, /* tp_dealloc */
-  0,          /* tp_print */
-  0,          /* tp_getattr */
-  0,          /* tp_setattr */
-  0,          /* tp_compare */
-  0,    /* tp_repr */
-  0,          /* tp_as_number */
-  0,          /* tp_as_sequence */
-  0,          /* tp_as_mapping */
-  0,          /* tp_hash */
-  0,          /* tp_call */
-  0,          /* tp_str */
-  PyObject_GenericGetAttr,    /* tp_getattro */
-  0,          /* tp_setattro */
-  0,          /* tp_as_buffer */
+  0,                        /* tp_vectorcall_offset */
+  nullptr,                  /* tp_getattr */
+  nullptr,                  /* tp_setattr */
+  nullptr,                  /* tp_compare */
+  nullptr,                  /* tp_repr */
+  nullptr,                  /* tp_as_number */
+  nullptr,                  /* tp_as_sequence */
+  nullptr,                  /* tp_as_mapping */
+  nullptr,                  /* tp_hash */
+  nullptr,                  /* tp_call */
+  nullptr,                  /* tp_str */
+  PyObject_GenericGetAttr,  /* tp_getattro */
+  nullptr,                  /* tp_setattro */
+  nullptr,                  /* tp_as_buffer */
   Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE ,    /* tp_flags */
   PythonQtImporter_doc,     /* tp_doc */
-  0,      /* tp_traverse */
-  0,          /* tp_clear */
-  0,          /* tp_richcompare */
-  0,          /* tp_weaklistoffset */
-  0,          /* tp_iter */
-  0,          /* tp_iternext */
-  PythonQtImporter_methods,     /* tp_methods */
-  0,          /* tp_members */
-  0,          /* tp_getset */
-  0,          /* tp_base */
-  0,          /* tp_dict */
-  0,          /* tp_descr_get */
-  0,          /* tp_descr_set */
-  0,          /* tp_dictoffset */
+  nullptr,                  /* tp_traverse */
+  nullptr,                  /* tp_clear */
+  nullptr,                  /* tp_richcompare */
+  0,                        /* tp_weaklistoffset */
+  nullptr,                  /* tp_iter */
+  nullptr,                  /* tp_iternext */
+  PythonQtImporter_methods, /* tp_methods */
+  nullptr,                  /* tp_members */
+  nullptr,                  /* tp_getset */
+  nullptr,                  /* tp_base */
+  nullptr,                  /* tp_dict */
+  nullptr,                  /* tp_descr_get */
+  nullptr,                  /* tp_descr_set */
+  0,                        /* tp_dictoffset */
   (initproc)PythonQtImporter_init,    /* tp_init */
   PyType_GenericAlloc,      /* tp_alloc */
-  PyType_GenericNew,      /* tp_new */
-  PyObject_Del,     /* tp_free */
+  PyType_GenericNew,        /* tp_new */
+  PyObject_Del,             /* tp_free */
 };
 
 
@@ -540,7 +543,7 @@ open_exclusive(const QString& filename)
   fd = open(filename.toLocal8Bit(), flags, 0666);
 #endif
   if (fd < 0)
-    return NULL;
+    return nullptr;
   return fdopen(fd, "wb");
 #else
   /* Best we can do -- on Windows this can't happen anyway */
@@ -557,7 +560,7 @@ void PythonQtImport::writeCompiledModule(PyCodeObject *co, const QString& filena
     return;
   }
   fp = open_exclusive(filename);
-  if (fp == NULL) {
+  if (fp == nullptr) {
     if (Py_VerboseFlag)
       PySys_WriteStderr(
       "# can't create %s\n", QStringToPythonConstCharPointer(filename));
@@ -576,6 +579,8 @@ void PythonQtImport::writeCompiledModule(PyCodeObject *co, const QString& filena
 #endif
 #ifdef PY3K
   PyMarshal_WriteLongToFile(sourceSize, fp, Py_MARSHAL_VERSION);
+#else
+  Q_UNUSED(sourceSize)
 #endif
 #if PY_VERSION_HEX < 0x02040000
   PyMarshal_WriteObjectToFile((PyObject *)co, fp);
@@ -647,20 +652,20 @@ PythonQtImport::unmarshalCode(const QString& path, const QByteArray& data, time_
 #ifdef PY3K
   // Python 3 also stores the size of the *.py file, but we ignore it for now
   int sourceSize = getLong((unsigned char *)buf + 8); 
-  Q_UNUSED(sourceSize);
+  Q_UNUSED(sourceSize)
   // read the module
   code = PyMarshal_ReadObjectFromString(buf + 12, size - 12);
 #else
   code = PyMarshal_ReadObjectFromString(buf + 8, size - 8);
 #endif
-  if (code == NULL)
-    return NULL;
+  if (code == nullptr)
+    return nullptr;
   if (!PyCode_Check(code)) {
     Py_DECREF(code);
     PyErr_Format(PyExc_TypeError,
          "compiled module %.200s is not a code object",
          QStringToPythonConstCharPointer(path));
-    return NULL;
+    return nullptr;
   }
   return code;
 }
@@ -672,14 +677,10 @@ PyObject *
 PythonQtImport::compileSource(const QString& path, const QByteArray& data)
 {
   PyObject *code;
-  QByteArray data1 = data;
-// in qt4, data is null terminated
-//  data1.resize(data.size()+1);
-//  data1.data()[data.size()-1] = 0;
 #ifdef PY3K
   PyObject* filename = PythonQtConv::QStringToPyObject(path);
   code = Py_CompileStringObject(data.data(), filename,
-                                Py_file_input, NULL, -1);
+                                Py_file_input, nullptr, -1);
   Py_DECREF(filename);
 #else
   code = Py_CompileString(data.data(), QStringToPythonConstCharPointer(path),
@@ -704,6 +705,18 @@ QString PythonQtImport::getSourceFilename(const QString& cacheFile)
   return pyFilename;
 }
 
+namespace
+{
+    qint64 toSecsSinceEpoch(const QDateTime& time)
+  {
+#if QT_VERSION < 0x060000
+    return time.toTime_t();
+#else
+    return time.toSecsSinceEpoch();
+#endif
+  }
+}
+
 /* Return the code object for the module named by 'fullname' from the
    Zip archive as a new reference. */
 PyObject *
@@ -718,7 +731,7 @@ PythonQtImport::getCodeFromData(const QString& path, int isbytecode,int /*ispack
       qdata = PythonQt::importInterface()->readSourceFile(path, ok);
       if (!ok) {
         //    mlabErrorConst("PythonQtImporter","File could not be verified" << path);
-        return NULL;
+        return nullptr;
       }
       if (qdata == " ") {
         qdata.clear();
@@ -739,7 +752,7 @@ PythonQtImport::getCodeFromData(const QString& path, int isbytecode,int /*ispack
       QDateTime time;
       time = PythonQt::importInterface()->lastModifiedDate(path);
       QString cacheFilename =  getCacheFilename(path, /*isOptimizedFilename=*/false);
-      writeCompiledModule((PyCodeObject*)code, cacheFilename, time.toTime_t(), /*sourceSize=*/qdata.length());
+      writeCompiledModule((PyCodeObject*)code, cacheFilename, toSecsSinceEpoch(time), /*sourceSize=*/qdata.length());
     }
   }
   return code;
@@ -753,7 +766,7 @@ PythonQtImport::getMTimeOfSource(const QString& path)
   if (PythonQt::importInterface()->exists(path2)) {
     QDateTime t = PythonQt::importInterface()->lastModifiedDate(path2);
     if (t.isValid()) {
-      mtime = t.toTime_t();
+      mtime = toSecsSinceEpoch(t);
     }
   }
 
@@ -773,7 +786,7 @@ PythonQtImport::getModuleCode(PythonQtImporter *self, const char* fullname, QStr
 
   QString test;
   for (zso = mlab_searchorder; *zso->suffix;zso++) {
-    PyObject *code = NULL;
+    PyObject *code = nullptr;
     test = path + zso->suffix;
 
     if (Py_VerboseFlag > 1)
@@ -797,13 +810,15 @@ PythonQtImport::getModuleCode(PythonQtImporter *self, const char* fullname, QStr
         Py_DECREF(code);
         continue;
       }
-      if (code != NULL) {
+      if (code != nullptr) {
         modpath = test;
 #ifdef PY3K
         if (isbytecode) {
           cachemodpath = modpath;
           modpath = getSourceFilename(modpath);
         }
+#else
+        Q_UNUSED(cachemodpath)
 #endif
       }
       return code;
@@ -811,7 +826,7 @@ PythonQtImport::getModuleCode(PythonQtImporter *self, const char* fullname, QStr
   }
   PyErr_Format(PythonQtImportError, "can't find module '%.200s'", fullname);
 
-  return NULL;
+  return nullptr;
 }
 
 QString PythonQtImport::replaceExtension(const QString& str, const QString& ext)
@@ -842,7 +857,7 @@ PyObject* PythonQtImport::getCodeFromPyc(const QString& file)
       mtime = getMTimeOfSource(pyc);
     }
     code = getCodeFromData(pyc, true, false, mtime);
-    if (code != Py_None && code != NULL) {
+    if (code != Py_None && code != nullptr) {
       return code;
     }
     if (code) {
@@ -864,11 +879,11 @@ static struct PyModuleDef PythonQtImport_def = {
     "PythonQtImport",   /* m_name */
     mlabimport_doc,     /* m_doc */
     -1,                 /* m_size */
-    NULL,               /* m_methods */
-    NULL,               /* m_reload */
-    NULL,               /* m_traverse */
-    NULL,               /* m_clear */
-    NULL                /* m_free */
+    nullptr,               /* m_methods */
+    nullptr,               /* m_reload */
+    nullptr,               /* m_traverse */
+    nullptr,               /* m_clear */
+    nullptr                /* m_free */
 };
 #endif
 
@@ -908,25 +923,21 @@ void PythonQtImport::init()
 #endif
 
   PythonQtImportError = PyErr_NewException(const_cast<char*>("PythonQtImport.PythonQtImportError"),
-              PyExc_ImportError, NULL);
-  if (PythonQtImportError == NULL) {
-    Py_XDECREF(mod);
+              PyExc_ImportError, nullptr);
+  if (PythonQtImportError == nullptr)
     return;
-  }
 
   Py_INCREF(PythonQtImportError);
   if (PyModule_AddObject(mod, "PythonQtImportError",
-                 PythonQtImportError) < 0) {
+             PythonQtImportError) < 0) {
     Py_DECREF(PythonQtImportError);
-    Py_DECREF(mod);
     return;
   }
 
   Py_INCREF(&PythonQtImporter_Type);
   if (PyModule_AddObject(mod, "PythonQtImporter",
-                 (PyObject *)&PythonQtImporter_Type) < 0) {
+             (PyObject *)&PythonQtImporter_Type) < 0) {
     Py_DECREF(&PythonQtImporter_Type);
-    Py_DECREF(mod);
     return;
   }
 
@@ -935,6 +946,4 @@ void PythonQtImport::init()
   PyObject* path_hooks = PySys_GetObject(const_cast<char*>("path_hooks"));
   // insert our importer before all other loaders
   PyList_Insert(path_hooks, 0, classobj);
-
-  Py_DECREF(mod);
 }

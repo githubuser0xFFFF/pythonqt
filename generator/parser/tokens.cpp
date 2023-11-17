@@ -41,6 +41,7 @@
 
 
 #include <QtCore/qglobal.h>
+#include <iostream>
 
 #include "tokens.h"
 
@@ -69,8 +70,10 @@ static char const * const _S_token_names[] = {
   "compl",
   "concat",
   "const",
+  "constexpr",
   "const_cast",
   "continue",
+  "decltype",
   "decr",
   "default",
   "delete",
@@ -103,12 +106,14 @@ static char const * const _S_token_names[] = {
   "mutable",
   "namespace",
   "new",
+  "noexcept",
   "not",
   "not_eq",
   "number_literal",
   "operator",
   "or",
   "or_eq",
+  "placeholder",
   "preproc",
   "private",
   "protected",
@@ -118,7 +123,8 @@ static char const * const _S_token_names[] = {
   "reinterpret_cast",
   "return",
   "scope",
-  "shift",
+  "shift_left",
+  "shift_right",
   "short",
   "signals",
   "signed",
@@ -149,7 +155,8 @@ static char const * const _S_token_names[] = {
   "xor",
   "xor_eq",
   "Q_ENUMS",
-  "Q_ENUM"
+  "Q_ENUM",
+  "Q_INVOKABLE"
 };
 
 static char _S_printable[][2] = {
@@ -251,6 +258,18 @@ static char _S_printable[][2] = {
   { char(127), '\0' },
 };
 
+int check_tokens_consistency()
+{
+  if (sizeof(_S_token_names) / sizeof(_S_token_names[0]) != TOKEN_KIND_COUNT - Token_K_DCOP)
+    {
+      std::cerr << "** ERROR enum TOKEN_KIND and _S_token_names are not consistent" << std::endl;
+      abort();
+    }
+  return 0;
+}
+
+static int tokens_consistency = check_tokens_consistency();
+
 char const *token_name(int token)
 {
   if (token == 0)
@@ -261,9 +280,9 @@ char const *token_name(int token)
     {
       return _S_printable[token - 32];
     }
-  else if (token >= 1000)
+  else if (token >= Token_K_DCOP)
     {
-      return _S_token_names[token - 1000];
+      return _S_token_names[token - Token_K_DCOP];
     }
 
   Q_ASSERT(0);
