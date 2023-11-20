@@ -24,6 +24,7 @@
 
   <object-type name="QSvgGenerator">
   </object-type>
+  <enum-type name="QSvgGenerator::SvgVersion" since-version="6.5"/>
 
   <object-type name="QGraphicsSvgItem">
     <extra-includes>
