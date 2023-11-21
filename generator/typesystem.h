@@ -167,6 +167,9 @@ namespace TypeSystem {
 
     //! A better normalized signature, which takes care of PODs with the same name
     QByteArray normalizedSignature(const char* signature);
+
+    //! Determine version ID from version string
+    unsigned int qtVersionFromString(const QString& value, bool& ok);
 }
 
 struct ReferenceCount
@@ -1216,7 +1219,7 @@ public:
     static QString globalNamespaceClassName(const TypeEntry *te);
     QString filename() const { return "typesystem.txt"; }
 
-    bool parseFile(const QString &filename, bool generate = true);
+    bool parseFile(const QString &filename, unsigned int qtVersion, bool generate = true);
 
 private:
     bool m_suppressWarnings;
