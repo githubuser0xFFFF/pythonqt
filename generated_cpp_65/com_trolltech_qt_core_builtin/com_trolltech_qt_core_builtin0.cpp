@@ -256,20 +256,20 @@ QByteArray*  PythonQtWrapper_QByteArray::append(QByteArray* theWrappedObject, qs
   return &( theWrappedObject->append(count, c));
 }
 
-char  PythonQtWrapper_QByteArray::at(QByteArray* theWrappedObject, qsizetype  i) const
+/*char  PythonQtWrapper_QByteArray::at(QByteArray* theWrappedObject, qsizetype  i) const
 {
   return ( theWrappedObject->at(i));
-}
+}*/
 
 char*  PythonQtWrapper_QByteArray::back(QByteArray* theWrappedObject)
 {
   return &( theWrappedObject->back());
 }
 
-char  PythonQtWrapper_QByteArray::back(QByteArray* theWrappedObject) const
+/*char  PythonQtWrapper_QByteArray::back(QByteArray* theWrappedObject) const
 {
   return ( theWrappedObject->back());
-}
+}*/
 
 qsizetype  PythonQtWrapper_QByteArray::capacity(QByteArray* theWrappedObject) const
 {
@@ -361,10 +361,10 @@ char*  PythonQtWrapper_QByteArray::front(QByteArray* theWrappedObject)
   return &( theWrappedObject->front());
 }
 
-char  PythonQtWrapper_QByteArray::front(QByteArray* theWrappedObject) const
+/*char  PythonQtWrapper_QByteArray::front(QByteArray* theWrappedObject) const
 {
   return ( theWrappedObject->front());
-}
+}*/
 
 qsizetype  PythonQtWrapper_QByteArray::indexOf(QByteArray* theWrappedObject, char  c, qsizetype  from) const
 {
@@ -581,10 +581,10 @@ char*  PythonQtWrapper_QByteArray::operator_subscript(QByteArray* theWrappedObje
   return &( (*theWrappedObject)[i]);
 }
 
-char  PythonQtWrapper_QByteArray::operator_subscript(QByteArray* theWrappedObject, qsizetype  i) const
+/*char  PythonQtWrapper_QByteArray::operator_subscript(QByteArray* theWrappedObject, qsizetype  i) const
 {
   return ( (*theWrappedObject)[i]);
-}
+}*/
 
 QByteArray  PythonQtWrapper_QByteArray::percentDecoded(QByteArray* theWrappedObject, char  percent) const
 {
@@ -3876,10 +3876,10 @@ QString  PythonQtWrapper_QUrl::fragment(QUrl* theWrappedObject, QUrl::ComponentF
   return ( theWrappedObject->fragment(options));
 }
 
-QString  PythonQtWrapper_QUrl::static_QUrl_fromAce(const QByteArray&  domain, QUrl::AceProcessingOptions  options)
+/*QString  PythonQtWrapper_QUrl::static_QUrl_fromAce(const QByteArray&  domain, QUrl::AceProcessingOptions  options)
 {
   return (QUrl::fromAce(domain, options));
-}
+}*/
 
 QUrl  PythonQtWrapper_QUrl::static_QUrl_fromEncoded(const QByteArray&  url, QUrl::ParsingMode  mode)
 {
@@ -4076,10 +4076,10 @@ void PythonQtWrapper_QUrl::swap(QUrl* theWrappedObject, QUrl&  other)
   ( theWrappedObject->swap(other));
 }
 
-QByteArray  PythonQtWrapper_QUrl::static_QUrl_toAce(const QString&  domain, QUrl::AceProcessingOptions  options)
+/*QByteArray  PythonQtWrapper_QUrl::static_QUrl_toAce(const QString&  domain, QUrl::AceProcessingOptions  options)
 {
   return (QUrl::toAce(domain, options));
-}
+}*/
 
 QString  PythonQtWrapper_QUrl::toDisplayString(QUrl* theWrappedObject, QUrl::FormattingOptions  options) const
 {

@@ -1,6 +1,6 @@
 #include <PythonQt.h>
 #include <QBrush>
-#include <QMatrix>
+//#include <QMatrix>
 #include <QObject>
 #include <QPixmap>
 #include <QStringList>
@@ -591,22 +591,22 @@ void delete_QImage(QImage* obj) { delete obj; }
     QString py_toString(QImage*);
     bool __nonzero__(QImage* obj) { return !obj->isNull(); }
 
-QImage* new_QImage( const uchar * data, int width, int height, QImage::Format format )
+/*QImage* new_QImage( const uchar * data, int width, int height, QImage::Format format )
 {
   QImage* image = new QImage(width, height, format);
   memcpy(image->bits(), data, image->byteCount());
   return image;
-}
+}*/
 
 PyObject* bits(QImage* image) {
   return PythonQtPrivate::wrapMemoryAsBuffer(image->bits(), image->bytesPerLine()* image->height());
 }
 
-#if QT_VERSION >= QT_VERSION_CHECK(4,7,0)
+/*#if QT_VERSION >= QT_VERSION_CHECK(4,7,0)
 PyObject* constBits(QImage* image) {
   return PythonQtPrivate::wrapMemoryAsBuffer(image->constBits(), image->byteCount());
 }
-#endif
+#endif*/
 
 PyObject* scanLine(QImage* image, int line) {
   return PythonQtPrivate::wrapMemoryAsBuffer(image->scanLine(line), image->bytesPerLine());
@@ -1250,7 +1250,7 @@ QTransform* new_QTransform(qreal  h11, qreal  h12, qreal  h13, qreal  h21, qreal
 QTransform* new_QTransform(qreal  h11, qreal  h12, qreal  h21, qreal  h22, qreal  dx, qreal  dy);
 void delete_QTransform(QTransform* obj) { delete obj; }
    QTransform  adjoint(QTransform* theWrappedObject) const;
-   QTransform  asAffineMatrix(QTransform* theWrappedObject);
+   //QTransform  asAffineMatrix(QTransform* theWrappedObject);
    qreal  determinant(QTransform* theWrappedObject) const;
    qreal  dx(QTransform* theWrappedObject) const;
    qreal  dy(QTransform* theWrappedObject) const;

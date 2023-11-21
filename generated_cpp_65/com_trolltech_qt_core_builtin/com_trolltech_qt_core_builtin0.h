@@ -97,9 +97,9 @@ void delete_QByteArray(QByteArray* obj) { delete obj; }
    QByteArray*  append(QByteArray* theWrappedObject, const QByteArray&  a);
    QByteArray*  append(QByteArray* theWrappedObject, const char*  s, qsizetype  len);
    QByteArray*  append(QByteArray* theWrappedObject, qsizetype  count, char  c);
-   char  at(QByteArray* theWrappedObject, qsizetype  i) const;
+   //char  at(QByteArray* theWrappedObject, qsizetype  i) const;
    char*  back(QByteArray* theWrappedObject);
-   char  back(QByteArray* theWrappedObject) const;
+   //char  back(QByteArray* theWrappedObject) const;
    qsizetype  capacity(QByteArray* theWrappedObject) const;
    const char*  cbegin(QByteArray* theWrappedObject) const;
    const char*  cend(QByteArray* theWrappedObject) const;
@@ -118,7 +118,7 @@ void delete_QByteArray(QByteArray* obj) { delete obj; }
    QByteArray  static_QByteArray_fromPercentEncoding(const QByteArray&  pctEncoded, char  percent = '%');
    QByteArray  static_QByteArray_fromRawData(const char*  data, qsizetype  size);
    char*  front(QByteArray* theWrappedObject);
-   char  front(QByteArray* theWrappedObject) const;
+   //char  front(QByteArray* theWrappedObject) const;
    qsizetype  indexOf(QByteArray* theWrappedObject, char  c, qsizetype  from = 0) const;
    QByteArray*  insert(QByteArray* theWrappedObject, qsizetype  i, char  c);
    QByteArray*  insert(QByteArray* theWrappedObject, qsizetype  i, const QByteArray&  data);
@@ -162,7 +162,7 @@ void delete_QByteArray(QByteArray* obj) { delete obj; }
    bool  __ge__(QByteArray* theWrappedObject, const QString&  s2) const;
    void readFrom(QByteArray* theWrappedObject, QDataStream&  arg__1);
    char*  operator_subscript(QByteArray* theWrappedObject, qsizetype  i);
-   char  operator_subscript(QByteArray* theWrappedObject, qsizetype  i) const;
+   //char  operator_subscript(QByteArray* theWrappedObject, qsizetype  i) const;
    QByteArray  percentDecoded(QByteArray* theWrappedObject, char  percent = '%') const;
    QByteArray*  prepend(QByteArray* theWrappedObject, char  c);
    QByteArray*  prepend(QByteArray* theWrappedObject, const QByteArray&  a);
@@ -282,9 +282,9 @@ void delete_QDate(QDate* obj) { delete obj; }
 class PythonQtWrapper_QDateTime : public QObject
 { Q_OBJECT
 public:
-Q_ENUMS(YearRange )
+/*Q_ENUMS(YearRange )
 enum YearRange{
-  First = QDateTime::First,   Last = QDateTime::Last};
+  First = QDateTime::First,   Last = QDateTime::Last};*/
 public slots:
 QDateTime* new_QDateTime();
 QDateTime* new_QDateTime(QDate  date, QTime  time);
@@ -1095,7 +1095,7 @@ void delete_QUrl(QUrl* obj) { delete obj; }
    QString  errorString(QUrl* theWrappedObject) const;
    QString  fileName(QUrl* theWrappedObject, QUrl::ComponentFormattingOptions  options = QUrl::FullyDecoded) const;
    QString  fragment(QUrl* theWrappedObject, QUrl::ComponentFormattingOptions  options = QUrl::PrettyDecoded) const;
-   QString  static_QUrl_fromAce(const QByteArray&  domain, QUrl::AceProcessingOptions  options = QUrl::{});
+   //QString  static_QUrl_fromAce(const QByteArray&  domain, QUrl::AceProcessingOptions  options = QUrl{});
    QUrl  static_QUrl_fromEncoded(const QByteArray&  url, QUrl::ParsingMode  mode = QUrl::TolerantMode);
    QUrl  static_QUrl_fromLocalFile(const QString&  localfile);
    QString  static_QUrl_fromPercentEncoding(const QByteArray&  arg__1);
@@ -1135,7 +1135,7 @@ void delete_QUrl(QUrl* obj) { delete obj; }
    void setUserInfo(QUrl* theWrappedObject, const QString&  userInfo, QUrl::ParsingMode  mode = QUrl::TolerantMode);
    void setUserName(QUrl* theWrappedObject, const QString&  userName, QUrl::ParsingMode  mode = QUrl::DecodedMode);
    void swap(QUrl* theWrappedObject, QUrl&  other);
-   QByteArray  static_QUrl_toAce(const QString&  domain, QUrl::AceProcessingOptions  options = QUrl::{});
+   //QByteArray  static_QUrl_toAce(const QString&  domain, QUrl::AceProcessingOptions  options = QUrl::{});
    QString  toDisplayString(QUrl* theWrappedObject, QUrl::FormattingOptions  options = QUrl::FormattingOptions(PrettyDecoded)) const;
    QByteArray  toEncoded(QUrl* theWrappedObject, QUrl::FormattingOptions  options = QUrl::FullyEncoded) const;
    QString  toLocalFile(QUrl* theWrappedObject) const;
@@ -1184,8 +1184,6 @@ enum ChecksumType{
   ChecksumIso3309 = Qt::ChecksumIso3309,   ChecksumItuV41 = Qt::ChecksumItuV41};
 enum ClipOperation{
   NoClip = Qt::NoClip,   ReplaceClip = Qt::ReplaceClip,   IntersectClip = Qt::IntersectClip};
-enum ColorScheme{
-  Unknown = Qt::Unknown,   Light = Qt::Light,   Dark = Qt::Dark};
 enum ConnectionType{
   AutoConnection = Qt::AutoConnection,   DirectConnection = Qt::DirectConnection,   QueuedConnection = Qt::QueuedConnection,   BlockingQueuedConnection = Qt::BlockingQueuedConnection,   UniqueConnection = Qt::UniqueConnection,   SingleShotConnection = Qt::SingleShotConnection};
 enum ContextMenuPolicy{

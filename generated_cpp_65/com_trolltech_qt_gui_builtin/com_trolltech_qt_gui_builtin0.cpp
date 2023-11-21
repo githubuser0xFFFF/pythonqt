@@ -3,7 +3,7 @@
 #include <PythonQtMethodInfo.h>
 #include <PythonQtSignalReceiver.h>
 #include <QBrush>
-#include <QMatrix>
+//#include <QMatrix>
 #include <QPixmap>
 #include <QStringList>
 #include <QVariant>
@@ -4503,10 +4503,10 @@ QTransform  PythonQtWrapper_QTransform::adjoint(QTransform* theWrappedObject) co
   return ( theWrappedObject->adjoint());
 }
 
-QTransform  PythonQtWrapper_QTransform::asAffineMatrix(QTransform* theWrappedObject)
+/*QTransform  PythonQtWrapper_QTransform::asAffineMatrix(QTransform* theWrappedObject)
 {
   return ( theWrappedObject->asAffineMatrix());
-}
+}*/
 
 qreal  PythonQtWrapper_QTransform::determinant(QTransform* theWrappedObject) const
 {
