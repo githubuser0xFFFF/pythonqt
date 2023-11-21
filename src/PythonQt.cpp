@@ -77,8 +77,8 @@ static inline PyObject *PyCode_GetVarnames(PyCodeObject *o) {
 PythonQt* PythonQt::_self = nullptr;
 int       PythonQt::_uniqueModuleCount = 0;
 
-//void PythonQt_init_QtGuiBuiltin(PyObject*);
-//void PythonQt_init_QtCoreBuiltin(PyObject*);
+void PythonQt_init_QtGuiBuiltin(PyObject*);
+void PythonQt_init_QtCoreBuiltin(PyObject*);
 
 
 void PythonQt::init(int flags, const QByteArray& pythonQtModuleName)
@@ -221,8 +221,8 @@ void PythonQt::init(int flags, const QByteArray& pythonQtModuleName)
     PythonQtRegisterIntegerMapConverter(QHash, QString);
     PythonQtMethodInfo::addParameterTypeAlias("QHash<QNetworkRequest::Attribute,QVariant>", "QHash<int,QVariant>");
 
-    //PythonQt_init_QtCoreBuiltin(nullptr);
-    //PythonQt_init_QtGuiBuiltin(nullptr);
+    PythonQt_init_QtCoreBuiltin(nullptr);
+    PythonQt_init_QtGuiBuiltin(nullptr);
 
     PythonQt::self()->addDecorators(new PythonQtStdDecorators());
     PythonQt::self()->registerCPPClass("QMetaObject",nullptr, "QtCore", PythonQtCreateObject<PythonQtWrapper_QMetaObject>);
