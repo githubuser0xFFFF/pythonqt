@@ -391,6 +391,28 @@ void AbstractMetaBuilder::sortLists()
    }
 }
 
+AbstractMetaClass* AbstractMetaBuilder::getGlobalNamespace(const TypeEntry* typeEntry)
+{
+  QString package = typeEntry->javaPackage();
+  QString globalName = TypeDatabase::globalNamespaceClassName(typeEntry);
+
+  AbstractMetaClass* global = m_meta_classes.findClass(package + "." + globalName);
+  if (!global) {
+    ComplexTypeEntry* gte = new NamespaceTypeEntry(globalName);
+    gte->setTargetLangPackage(typeEntry->javaPackage());
+    gte->setCodeGeneration(typeEntry->codeGeneration());
+    global = createMetaClass();
+    global->setIsGlobalNamespace(true);
+    global->setTypeEntry(gte);
+    *global += AbstractMetaAttributes::Final;
+    *global += AbstractMetaAttributes::Public;
+    *global += AbstractMetaAttributes::Fake;
+
+    m_meta_classes << global;
+  }
+  return global;
+}
+
 bool AbstractMetaBuilder::build()
 {
     Q_ASSERT(!m_file_name.isEmpty());
@@ -430,6 +452,15 @@ bool AbstractMetaBuilder::build()
 
 
     // Start the generation...
+
+    // First automatically add all enums marked as QEnum into the TypeDatabase
+    // (if they don't contain an entry already). If there is an QEnum entry,
+    // the enum is obviously meant for scripting.
+    for (ClassModelItem item : typeMap.values()) {
+        autoAddQEnumsForClassItem(item);
+    }
+
+
     for (ClassModelItem item :  typeMap.values()) {
         AbstractMetaClass *cls = traverseClass(item);
         addAbstractMetaClass(cls);
@@ -451,35 +482,20 @@ bool AbstractMetaBuilder::build()
         AbstractMetaEnum *meta_enum = traverseEnum(item, 0, QSet<QString>());
 
         if (meta_enum) {
-            QString package = meta_enum->typeEntry()->javaPackage();
-            QString globalName = TypeDatabase::globalNamespaceClassName(meta_enum->typeEntry());
-
-            AbstractMetaClass *global = m_meta_classes.findClass(package + "." + globalName);
-            if (!global) {
-                ComplexTypeEntry *gte = new ObjectTypeEntry(globalName);
-                gte->setTargetLangPackage(meta_enum->typeEntry()->javaPackage());
-                gte->setCodeGeneration(meta_enum->typeEntry()->codeGeneration());
-                global = createMetaClass();
-                global->setTypeEntry(gte);
-                *global += AbstractMetaAttributes::Final;
-                *global += AbstractMetaAttributes::Public;
-                *global += AbstractMetaAttributes::Fake;
-
-                m_meta_classes << global;
-            }
+            AbstractMetaClass* global = getGlobalNamespace(meta_enum->typeEntry());
 
             global->addEnum(meta_enum);
-            meta_enum->setEnclosingClass(global);
-            meta_enum->typeEntry()->setQualifier(globalName);
 
             // Global enums should be public despite not having public
             // identifiers so we'll fix the original attributes here.
             meta_enum->setOriginalAttributes(meta_enum->attributes());
+
+            // global enums have their own include
+            if (meta_enum->typeEntry()->include().isValid()) {
+              global->typeEntry()->addExtraInclude(meta_enum->typeEntry()->include());
+            }
         }
-
-
     }
-
 
     // Go through all typedefs to see if we have defined any
     // specific typedefs to be used as classes.
@@ -593,7 +609,6 @@ bool AbstractMetaBuilder::build()
         }
     }
 
-    figureOutEnumValues();
     checkFunctionModifications();
 
     for (AbstractMetaClass *cls :  m_meta_classes) {
@@ -607,6 +622,33 @@ bool AbstractMetaBuilder::build()
     sortLists();
 
     return true;
+}
+
+void AbstractMetaBuilder::autoAddQEnumsForClassItem(ClassModelItem class_item)
+{
+    // also do this for sub-classes:
+    for (ClassModelItem sub_class : class_item->classMap().values()) {
+        autoAddQEnumsForClassItem(sub_class);
+    }
+
+    auto qEnumDeclarations = class_item->qEnumDeclarations();
+    for (EnumModelItem enum_item : class_item->enumMap().values()) {
+        if (enum_item) {
+            const auto& names = enum_item->qualifiedName();
+            QString qualified_name = names.join("::");
+            QString enum_name = enum_item->name();
+
+            bool hasQEnumDeclaration = qEnumDeclarations.contains(qualified_name)
+                                    || qEnumDeclarations.contains(enum_name);
+
+            TypeEntry* type_entry = TypeDatabase::instance()->findType(qualified_name);
+            if (hasQEnumDeclaration && !type_entry) {
+                // automatically add enum type declared as Q_ENUM
+                type_entry = new EnumTypeEntry(QStringList(names.mid(0, names.size() - 1)).join("::"), names.last());
+                TypeDatabase::instance()->addType(type_entry);
+            }
+        }
+    }
 }
 
 
@@ -664,9 +706,19 @@ AbstractMetaClass *AbstractMetaBuilder::traverseNamespace(NamespaceModelItem nam
                                .arg(meta_class->package())
                                .arg(namespace_item->name()));
 
-    traverseEnums(model_dynamic_cast<ScopeModelItem>(namespace_item), meta_class, namespace_item->enumsDeclarations());
+    traverseEnums(model_dynamic_cast<ScopeModelItem>(namespace_item), meta_class, namespace_item->qEnumDeclarations());
     traverseFunctions(model_dynamic_cast<ScopeModelItem>(namespace_item), meta_class);
 //     traverseClasses(model_dynamic_cast<ScopeModelItem>(namespace_item));
+
+    // collect all include files (since namespace items might come from different files)
+    QSet<QString> includeFiles;
+    for (const auto& item : namespace_item->enums()) {
+      includeFiles.insert(item->fileName());
+    }
+    for (const auto& item : namespace_item->functions()) {
+      includeFiles.insert(item->fileName());
+    }
+    // (should we do this for typeAliases and inner namespaces too?)
 
     pushScope(model_dynamic_cast<ScopeModelItem>(namespace_item));
     m_namespace_prefix = currentScope()->qualifiedName().join("::");
@@ -676,6 +728,7 @@ AbstractMetaClass *AbstractMetaBuilder::traverseNamespace(NamespaceModelItem nam
     for (ClassModelItem cls :  classes) {
         AbstractMetaClass *mjc = traverseClass(cls);
         addAbstractMetaClass(mjc);
+        includeFiles.insert(cls->fileName());
     }
 
     // Go through all typedefs to see if we have defined any
@@ -705,225 +758,13 @@ AbstractMetaClass *AbstractMetaBuilder::traverseNamespace(NamespaceModelItem nam
         QFileInfo info(namespace_item->fileName());
         type->setInclude(Include(Include::IncludePath, info.fileName()));
     }
+    // namespace items might come from different include files:
+    for (const QString& oneIncludeFile : includeFiles) {
+      QFileInfo info(oneIncludeFile);
+      type->addExtraInclude(Include(Include::IncludePath, info.fileName()));
+    }
 
     return meta_class;
-}
-
-struct Operator
-{
-    enum Type { Plus, ShiftLeft, None };
-
-    Operator() : type(None) { }
-
-    int calculate(int x) {
-        switch (type) {
-        case Plus: return x + value;
-        case ShiftLeft: return x << value;
-        case None: return x;
-        }
-        return x;
-    }
-
-    Type type;
-    int value;
-};
-
-
-
-Operator findOperator(QString *s) {
-    const char *names[] = {
-        "+",
-        "<<"
-    };
-
-    for (int i=0; i<Operator::None; ++i) {
-        QString name = QLatin1String(names[i]);
-        QString str = *s;
-        int splitPoint = str.indexOf(name);
-        if (splitPoint > 0) {
-            bool ok;
-            QString right = str.mid(splitPoint + name.length());
-            Operator op;
-            op.value = right.toInt(&ok);
-            if (ok) {
-                op.type = Operator::Type(i);
-                *s = str.left(splitPoint).trimmed();
-                return op;
-            }
-        }
-    }
-    return Operator();
-}
-
-int AbstractMetaBuilder::figureOutEnumValue(const QString &stringValue,
-                                        int oldValuevalue,
-                                        AbstractMetaEnum *meta_enum,
-                                        AbstractMetaFunction *meta_function)
-{
-    Q_UNUSED(meta_function)
-    if (stringValue.isEmpty())
-        return oldValuevalue;
-
-    QStringList stringValues = stringValue.split("|");
-
-    int returnValue = 0;
-
-    bool matched = false;
-
-    for (int i=0; i<stringValues.size(); ++i) {
-        QString s = stringValues.at(i).trimmed();
-
-        bool ok;
-        int v;
-
-        Operator op = findOperator(&s);
-
-        if (s.length() > 0 && s.at(0) == QLatin1Char('0'))
-            v = s.toUInt(&ok, 0);
-        else
-            v = s.toInt(&ok);
-
-        if (ok) {
-            matched = true;
-
-        } else if (m_enum_values.contains(s)) {
-            v = m_enum_values[s]->value();
-            matched = true;
-
-        } else {
-            AbstractMetaEnumValue *ev = 0;
-
-            if (meta_enum && (ev = meta_enum->values().find(s))) {
-                v = ev->value();
-                matched = true;
-
-            } else if (meta_enum && (ev = meta_enum->enclosingClass()->findEnumValue(s, meta_enum))) {
-                v = ev->value();
-                matched = true;
-
-            } else {
-              /*
-                if (meta_enum)
-                    ReportHandler::warning("unhandled enum value: " + s + " in "
-                                           + meta_enum->enclosingClass()->name() + "::"
-                                           + meta_enum->name());
-                else
-                    ReportHandler::warning("unhandled enum value: Unknown enum");
-                    */
-            }
-        }
-
-        if (matched)
-            returnValue |= op.calculate(v);
-    }
-
-    if (!matched) {
-        /* not helpful...
-        QString warn = QString("unmatched enum %1").arg(stringValue);
-
-        if (meta_function != 0) {
-            warn += QString(" when parsing default value of '%1' in class '%2'")
-                .arg(meta_function->name())
-                .arg(meta_function->implementingClass()->name());
-        }
-
-        ReportHandler::warning(warn);
-        */
-        returnValue = oldValuevalue;
-    }
-
-    return returnValue;
-}
-
-void AbstractMetaBuilder::figureOutEnumValuesForClass(AbstractMetaClass *meta_class,
-                                                  QSet<AbstractMetaClass *> *classes)
-{
-    AbstractMetaClass *base = meta_class->baseClass();
-
-    if (base != 0 && !classes->contains(base))
-        figureOutEnumValuesForClass(base, classes);
-
-    if (classes->contains(meta_class))
-        return;
-
-    AbstractMetaEnumList enums = meta_class->enums();
-    for (AbstractMetaEnum *e :  enums) {
-        if (!e) {
-            ReportHandler::warning("bad enum in class " + meta_class->name());
-            continue;
-        }
-        AbstractMetaEnumValueList lst = e->values();
-        int value = 0;
-        for (int i=0; i<lst.size(); ++i) {
-            value = figureOutEnumValue(lst.at(i)->stringValue(), value, e);
-            lst.at(i)->setValue(value);
-            value++;
-        }
-
-        // Check for duplicate values...
-        EnumTypeEntry *ete = e->typeEntry();
-        if (!ete->forceInteger()) {
-            QHash<int, AbstractMetaEnumValue *> entries;
-            for (AbstractMetaEnumValue *v :  lst) {
-
-                bool vRejected = ete->isEnumValueRejected(v->name());
-
-                AbstractMetaEnumValue *current = entries.value(v->value());
-                if (current) {
-                    bool currentRejected = ete->isEnumValueRejected(current->name());
-                    if (!currentRejected && !vRejected) {
-                        /* Removed because I don't see the sense of rejecting duplicate values...
-                        ReportHandler::warning(
-                            QString("duplicate enum values: %1::%2, %3 and %4 are %5, already rejected: (%6)")
-                            .arg(meta_class->name())
-                            .arg(e->name())
-                            .arg(v->name())
-                            .arg(entries[v->value()]->name())
-                            .arg(v->value())
-                            .arg(ete->enumValueRejections().join(", ")));
-                        continue;
-                        */
-                    }
-                }
-
-                if (!vRejected)
-                    entries[v->value()] = v;
-            }
-
-            // Entries now contain all the original entries, no
-            // rejected ones... Use this to generate the enumValueRedirection table.
-            for (AbstractMetaEnumValue *reject :  lst) {
-                if (!ete->isEnumValueRejected(reject->name()))
-                    continue;
-
-                AbstractMetaEnumValue *used = entries.value(reject->value());
-                if (!used) {
-                    ReportHandler::warning(
-                        QString::fromLatin1("Rejected enum has no alternative...: %1::%2")
-                        .arg(meta_class->name())
-                        .arg(reject->name()));
-                    continue;
-                }
-                ete->addEnumValueRedirection(reject->name(), used->name());
-            }
-
-        }
-    }
-
-
-
-    *classes += meta_class;
-}
-
-
-void AbstractMetaBuilder::figureOutEnumValues()
-{
-    // Keep a set of classes that we already traversed. We use this to
-    // enforce that we traverse base classes prior to subclasses.
-    QSet<AbstractMetaClass *> classes;
-    for (AbstractMetaClass *c :  m_meta_classes) {
-        figureOutEnumValuesForClass(c, &classes);
-    }
 }
 
 
@@ -955,6 +796,8 @@ AbstractMetaEnum *AbstractMetaBuilder::traverseEnum(EnumModelItem enum_item, Abs
         m_rejected_enums.insert(qualified_name, NotInTypeSystem);
        return 0;
     }
+
+    static_cast<EnumTypeEntry*>(type_entry)->setEnumClass(enum_item->isEnumClass());
 
     AbstractMetaEnum *meta_enum = createMetaEnum();
     if (   enumsDeclarations.contains(qualified_name)
@@ -1106,11 +949,11 @@ AbstractMetaClass *AbstractMetaBuilder::traverseClass(ClassModelItem class_item)
     meta_class->setTemplateArguments(template_args);
     meta_class->setHasActualDeclaration(class_item->hasActualDeclaration());
 
-    parseQ_Property(meta_class, class_item->propertyDeclarations());
-
     traverseFunctions(model_dynamic_cast<ScopeModelItem>(class_item), meta_class);
-    traverseEnums(model_dynamic_cast<ScopeModelItem>(class_item), meta_class, class_item->enumsDeclarations());
+    traverseEnums(model_dynamic_cast<ScopeModelItem>(class_item), meta_class, class_item->qEnumDeclarations());
     traverseFields(model_dynamic_cast<ScopeModelItem>(class_item), meta_class);
+
+    parseQ_Property(meta_class, class_item->propertyDeclarations());
 
     // Inner classes
     {
@@ -1273,8 +1116,15 @@ void AbstractMetaBuilder::traverseFunctions(ScopeModelItem scope_item, AbstractM
             bool isInvalidDestructor = meta_function->isDestructor() && meta_function->isPrivate();
             bool isInvalidConstructor = meta_function->isConstructor()
                 && (meta_function->isPrivate() || meta_function->isInvalid());
+            if (isInvalidConstructor && meta_function->arguments().size() == 1 &&
+              meta_class->qualifiedCppName() == meta_function->arguments().at(0)->type()->typeEntry()->qualifiedCppName())
+            {
+                // deleted or private copy constructor, it seems copying is not allowed
+                meta_class->typeEntry()->setNoCopy(true);
+            }
             if ((isInvalidDestructor || isInvalidConstructor)
-                && !meta_class->hasNonPrivateConstructor()) {
+                && !meta_class->hasNonPrivateConstructor())
+            {
                 *meta_class += AbstractMetaAttributes::Final;
             } else if (meta_function->isConstructor() && !meta_function->isPrivate()) {
                 *meta_class -= AbstractMetaAttributes::Final;
@@ -1320,6 +1170,48 @@ void AbstractMetaBuilder::traverseFunctions(ScopeModelItem scope_item, AbstractM
                   meta_class->setHasPublicDestructor(false);
                 }
                 meta_class->setHasVirtualDestructor(meta_function->isVirtual());
+            }
+        }
+    }
+    removeEquivalentFunctions(meta_class);
+}
+
+void AbstractMetaBuilder::removeEquivalentFunctions(AbstractMetaClass* parent)
+{
+    AbstractMetaFunctionList functions = parent->functions();
+    for (AbstractMetaFunction* fun : functions)
+    {
+        AbstractMetaArgumentList args = fun->arguments();
+        bool candidateToRemove = false;
+        for (AbstractMetaArgument* arg : args) {
+            const TypeEntry* argType = arg->type()->typeEntry();
+            if (argType && argType->equivalentType()) {
+                candidateToRemove = true;
+                break;
+            }
+        }
+        if (!candidateToRemove) {
+            continue;
+        }
+        // check if there are other functions with the same name and equivalent parameters
+        AbstractMetaFunctionList overloadedFunctions = parent->queryFunctionsByName(fun->name());
+        for (AbstractMetaFunction* overload : overloadedFunctions) {
+            if (overload != fun) {
+                AbstractMetaArgumentList overloadArgs = overload->arguments();
+                if (overloadArgs.size() == args.size()) {
+                    bool equivalentArgs = true;
+                    for (int i = 0; i < args.size() && equivalentArgs; i++) {
+                        const TypeEntry* argType = args[i]->type()->typeEntry();
+                        const TypeEntry* overloadArgType = overloadArgs[i]->type()->typeEntry();
+                        // This could have some more equivalency checks, but currently this seems to be sufficient
+                        equivalentArgs = (argType && overloadArgType &&
+                                          (argType == overloadArgType || argType->equivalentType() == overloadArgType));
+                    }
+                    if (equivalentArgs) {
+                        parent->removeFunction(fun);
+                        break;
+                    }
+                }
             }
         }
     }
@@ -1449,17 +1341,11 @@ bool AbstractMetaBuilder::setupInheritance(AbstractMetaClass *meta_class)
     return true;
 }
 
-void AbstractMetaBuilder::traverseEnums(ScopeModelItem scope_item, AbstractMetaClass *meta_class, const QStringList &enumsDeclarations)
+void AbstractMetaBuilder::traverseEnums(ScopeModelItem scope_item, AbstractMetaClass *meta_class, const QSet<QString> &qEnumDeclarations)
 {
     EnumList enums = scope_item->enums();
     for (EnumModelItem enum_item :  enums) {
-        AbstractMetaEnum *meta_enum = traverseEnum(enum_item, meta_class,
-#if QT_VERSION < QT_VERSION_CHECK(5,14,0)
-            QSet<QString>::fromList(enumsDeclarations)
-#else
-            QSet<QString>(enumsDeclarations.begin(), enumsDeclarations.end())
-#endif
-        );
+        AbstractMetaEnum* meta_enum = traverseEnum(enum_item, meta_class, qEnumDeclarations);
         if (meta_enum) {
             meta_enum->setOriginalAttributes(meta_enum->attributes());
             meta_class->addEnum(meta_enum);
@@ -1604,11 +1490,6 @@ AbstractMetaFunction *AbstractMetaBuilder::traverseFunction(FunctionModelItem fu
             meta_function->setFunctionType(AbstractMetaFunction::SlotFunction);
     }
 
-    if (function_item->isDeleted()) {
-      meta_function->setInvalid(true);
-      return meta_function;
-    }
-
     ArgumentList arguments = function_item->arguments();
     AbstractMetaArgumentList meta_arguments;
 
@@ -1664,7 +1545,7 @@ AbstractMetaFunction *AbstractMetaBuilder::traverseFunction(FunctionModelItem fu
         }
     }
 
-    // If we where not able to translate the default argument make it
+    // If we were not able to translate the default argument make it
     // reset all default arguments before this one too.
     for (int i=0; i<first_default_argument; ++i) {
         meta_arguments[i]->setDefaultValueExpression(QString());
@@ -1674,6 +1555,11 @@ AbstractMetaFunction *AbstractMetaBuilder::traverseFunction(FunctionModelItem fu
         for (AbstractMetaArgument *arg :  meta_arguments) {
             ReportHandler::debugFull("   - " + arg->toString());
         }
+    }
+
+    if (function_item->isDeleted()) {
+      meta_function->setInvalid(true);
+      return meta_function;
     }
 
     return meta_function;
@@ -1717,7 +1603,7 @@ AbstractMetaType *AbstractMetaBuilder::translateType(const TypeInfo &_typei, boo
         return 0;
     }
 
-    TypeParser::Info typeInfo = TypeParser::parse(typei.toString());
+    TypeParser::Info typeInfo = TypeParser::parse(typei.toString(/*parsable=*/true));
     if (typeInfo.is_busted) {
         *ok = false;
         return 0;
@@ -1735,7 +1621,6 @@ AbstractMetaType *AbstractMetaBuilder::translateType(const TypeInfo &_typei, boo
             //newInfo.setArguments(typei.arguments());
             newInfo.setIndirections(typei.indirections());
             newInfo.setConstant(typei.isConstant());
-            newInfo.setConstexpr(typei.isConstexpr());
             newInfo.setFunctionPointer(typei.isFunctionPointer());
             newInfo.setQualifiedName(typei.qualifiedName());
             newInfo.setReference(typei.isReference());
@@ -2233,11 +2118,33 @@ void AbstractMetaBuilder::parseQ_Property(AbstractMetaClass *meta_class, const Q
         QStringList qualifiedScopeName = currentScope()->qualifiedName();
         bool ok = false;
         AbstractMetaType *type = 0;
-        QString scope;
+        int pIndex = 0;
+        QString typeName = l.value(pIndex++);
+        bool isConst = false;
+        if (typeName == "const") {
+            // use the next part as the type name
+            typeName = l.value(pIndex++);
+            isConst = true;
+        }
+        QString propertyName = l.value(pIndex++);
+        QString modifiers;
+        while (typeName.endsWith("*") || typeName.endsWith("&")) {
+            modifiers.insert(0, typeName.at(typeName.length() - 1));
+            typeName.chop(1);
+        }
+        while (propertyName.startsWith("*") || propertyName.startsWith("&")) {
+            modifiers.append(propertyName.at(0));
+            propertyName.remove(0, 1);
+            if (propertyName.isEmpty() && pIndex < l.size()) {
+                propertyName = l.value(pIndex++);
+            }
+        }
         for (int j=qualifiedScopeName.size(); j>=0; --j) {
-            scope = j > 0 ? QStringList(qualifiedScopeName.mid(0, j)).join("::") + "::" : QString();
+            QStringList scope(qualifiedScopeName.mid(0, j));
             TypeInfo info;
-            info.setQualifiedName((scope + l.at(0)).split("::"));
+            info.setIndirections(modifiers.count('*'));
+            info.setReference(modifiers.contains('&')); // r-value reference seems improbable for a property...
+            info.setQualifiedName(scope + QStringList(typeName));
 
             type = translateType(info, &ok);
             if (type != 0 && ok) {
@@ -2246,18 +2153,16 @@ void AbstractMetaBuilder::parseQ_Property(AbstractMetaClass *meta_class, const Q
         }
 
         if (type == 0 || !ok) {
-            ReportHandler::warning(QString("Unable to decide type of property: '%1' in class '%2'")
-                                   .arg(l.at(0)).arg(meta_class->name()));
+            ReportHandler::warning(QString("Unable to decide type '%1' of property '%2' in class '%3'")
+                                   .arg(typeName).arg(propertyName).arg(meta_class->name()));
             continue;
         }
 
-        QString typeName = scope + l.at(0);
-
         QPropertySpec *spec = new QPropertySpec(type->typeEntry());
-        spec->setName(l.at(1));
+        spec->setName(propertyName);
         spec->setIndex(i);
 
-        for (int pos=2; pos+1<l.size(); pos+=2) {
+        for (int pos=pIndex; pos+1<l.size(); pos+=2) {
             if (l.at(pos) == QLatin1String("READ"))
                 spec->setRead(l.at(pos+1));
             else if (l.at(pos) == QLatin1String("WRITE"))

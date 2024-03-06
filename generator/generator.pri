@@ -5,6 +5,7 @@ TEMPLATE = app
 #CONFIG += cmdline -- does not work as expected with old Qt versions, f.e. is missing in 5.9
 CONFIG += console
 CONFIG -= app_bundle
+CONFIG += msvc_mp
 
 TARGET +=
 DEPENDPATH += $$GENERATORPATH tests parser
@@ -35,7 +36,6 @@ win32-clang-msvc:QMAKE_CXXFLAGS += -Wno-language-extension-token -Wno-microsoft-
 # Input
 HEADERS += \
         $$GENERATORPATH/generator.h \
-        $$GENERATORPATH/main.h \
         $$GENERATORPATH/reporthandler.h \
         $$GENERATORPATH/typeparser.h \
         $$GENERATORPATH/typesystem.h \

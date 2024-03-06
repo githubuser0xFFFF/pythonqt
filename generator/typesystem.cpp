@@ -269,7 +269,7 @@ void Handler::fetchAttributeValues(const QString &name, const QXmlAttributes &at
         QString key = atts.localName(i).toLower();
         QString val = atts.value(i);
 
-        if (!acceptedAttributes->contains(key) && key != "after-version" && key != "before-version") {
+        if (!acceptedAttributes->contains(key) && key != "since-version" && key != "before-version") {
             ReportHandler::warning(QString("Unknown attribute for '%1': '%2'").arg(name).arg(key));
         } else {
             (*acceptedAttributes)[key] = val;
@@ -484,16 +484,16 @@ bool Handler::qtVersionMatches(const QXmlAttributes& atts, bool& ok)
       m_error = "Invalid 'before-version' version string: " + atts.value(beforeIndex);
     }
   }
-  int afterIndex = atts.index("after-version"); // after-version really means this version or any version after
-  if (afterIndex >= 0) {
-    uint afterVersion = TypeSystem::qtVersionFromString(atts.value(afterIndex), ok);
+  int sinceIndex = atts.index("since-version");
+  if (sinceIndex >= 0) {
+    uint sinceVersion = TypeSystem::qtVersionFromString(atts.value(sinceIndex), ok);
     if (ok) {
-      if (m_qtVersion < afterVersion) {
+      if (m_qtVersion < sinceVersion) {
         return false;
       }
     }
     else {
-      m_error = "Invalid 'after-version' version string: " + atts.value(afterIndex);
+      m_error = "Invalid 'since-version' version string: " + atts.value(sinceIndex);
     }
   }
   return true;
@@ -1509,14 +1509,27 @@ TypeDatabase *TypeDatabase::instance()
 
 TypeDatabase::TypeDatabase() : m_suppressWarnings(true)
 {
-    addType(new StringTypeEntry("QString"));
+    StringTypeEntry* mainStringType = new StringTypeEntry("QString");
+    addType(mainStringType);
 
     StringTypeEntry *e = new StringTypeEntry("QLatin1String");
     e->setPreferredConversion(false);
+    e->setEquivalentType(mainStringType);
     addType(e);
 
     e = new StringTypeEntry("QStringRef");
     e->setPreferredConversion(false);
+    e->setEquivalentType(mainStringType);
+    addType(e);
+
+    e = new StringTypeEntry("QStringView");
+    e->setPreferredConversion(false);
+    e->setEquivalentType(mainStringType);
+    addType(e);
+
+    e = new StringTypeEntry("QAnyStringView");
+    e->setPreferredConversion(false);
+    e->setEquivalentType(mainStringType);
     addType(e);
 
     e = new StringTypeEntry("QXmlStreamStringRef");
@@ -1554,10 +1567,24 @@ TypeDatabase::TypeDatabase() : m_suppressWarnings(true)
     addType(new ContainerTypeEntry("QMap", ContainerTypeEntry::MapContainer));
     addType(new ContainerTypeEntry("QHash", ContainerTypeEntry::HashContainer));
     addType(new ContainerTypeEntry("QPair", ContainerTypeEntry::PairContainer));
+    addType(new ContainerTypeEntry("std::pair", ContainerTypeEntry::PairContainer));
     addType(new ContainerTypeEntry("QQueue", ContainerTypeEntry::QueueContainer));
     addType(new ContainerTypeEntry("QMultiMap", ContainerTypeEntry::MultiMapContainer));
 
     addRemoveFunctionToTemplates(this);
+}
+
+void TypeDatabase::finalSetup()
+{
+  TypeEntry* byteArrayType = findType("QByteArray");
+  if (byteArrayType) {
+      // Support QByteArrayView as alternative parameter type.
+      // Using StringTypeEntry for it, because no wrappers are generated for those types
+      StringTypeEntry* e = new StringTypeEntry("QByteArrayView");
+      e->setPreferredConversion(false);
+      e->setEquivalentType(byteArrayType);
+      addType(e);
+  }
 }
 
 bool TypeDatabase::parseFile(const QString &filename, unsigned int qtVersion, bool generate)
@@ -1742,19 +1769,6 @@ QString FlagsTypeEntry::jniName() const
     return "jint";
 }
 
-void EnumTypeEntry::addEnumValueRedirection(const QString &rejected, const QString &usedValue)
-{
-    m_enum_redirections << EnumValueRedirection(rejected, usedValue);
-}
-
-QString EnumTypeEntry::enumValueRedirection(const QString &value) const
-{
-    for (int i=0; i<m_enum_redirections.size(); ++i)
-        if (m_enum_redirections.at(i).rejected == value)
-            return m_enum_redirections.at(i).used;
-    return QString();
-}
-
 QString FlagsTypeEntry::qualifiedTargetLangName() const
 {
     return javaPackage() + "." + m_enum->javaQualifier() + "." + targetLangName();
@@ -1822,8 +1836,9 @@ FlagsTypeEntry *TypeDatabase::findFlagsType(const QString &name) const
     return fte ? fte : (FlagsTypeEntry *) m_flags_entries.value(name);
 }
 
-QString TypeDatabase::globalNamespaceClassName(const TypeEntry * /*entry*/) {
-    return QLatin1String("Global");
+QString TypeDatabase::globalNamespaceClassName(const TypeEntry * entry)
+{
+    return "Qt" + entry->javaPackage().split('.').back();
 }
 
 

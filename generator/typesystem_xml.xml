@@ -1,5 +1,6 @@
 <?xml version="1.0"?>
-<typesystem package="com.trolltech.qt.xml"><rejection class="QXmlNamespaceSupport"/>
+<typesystem package="com.trolltech.qt.Xml">
+    <rejection class="QXmlNamespaceSupport"/>
     <rejection class="QXmlAttributes::Attribute"/>
     <rejection class="QDomNode" field-name="impl"/>
 
@@ -35,6 +36,8 @@
         <modify-function signature="nodeType()const" remove="all"/>
         <modify-function signature="operator=(QDomDocument)" remove="all"/>
     </value-type>
+    <enum-type name="QDomDocument::ParseOption" flags="QDomDocument::ParseOptions" since-version="6.5"/>
+    <value-type name="QDomDocument::ParseResult" since-version="6.5"/>
 
     <value-type name="QDomDocumentFragment">
         <modify-function signature="nodeType()const" remove="all"/>
@@ -179,6 +182,7 @@
       <modify-function signature="QXmlStreamReader(const char*)" remove="all"/>
       <modify-function signature="addData(const char*)" remove="all"/>
     </object-type>
+    <rejection class="QXmlStreamReader::PrivateConstructorTag"/>
     <object-type name="QXmlStreamWriter">
         <modify-function signature="QXmlStreamWriter(QString *)">
             <remove/>

@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<typesystem package="com.trolltech.qt.multimedia">
+<typesystem package="com.trolltech.qt.Multimedia">
 
 <rejection class="QAbstractVideoBuffer" function-name="mapPlanes"/>
 <rejection class="QAbstractPlanarVideoBuffer"/>
@@ -7,12 +7,23 @@
 <rejection class="QAudioBuffer::StereoFrame"/>
 <rejection class="QVideoFilterRunnable"/>
 <rejection class="QAbstractVideoFilter"/>
+<rejection class="QAudioFrame"/>   <!-- template class -->
+<rejection class="QWaveDecoder"/>   <!-- not documented, probably should use QAudioDecoder instead -->
 
 <enum-type name="QAudioFormat::Endian"/>
 <enum-type name="QAudioFormat::SampleType"/>
+<group since-version="6">
+<enum-type name="QAudioFormat::ChannelConfig"/>
+<enum-type name="QAudioFormat::AudioChannelPosition"/>
+<enum-type name="QAudioFormat::SampleFormat"/>
+</group>
 <enum-type name="QSoundEffect::Status"/>
 <enum-type name="QSoundEffect::Loop"/>
-<enum-type name="QAbstractVideoBuffer::HandleType"/>
+<enum-type name="QAbstractVideoBuffer::HandleType">
+  <!-- GLTextureRectangleHandle did not exist until Qt 5.15.8 (introduced for macOS it seems);
+       Ubuntu 22.04 only has Qt 5.15.3 by default. In Qt 6 QAbstractVideoBuffer is private anyway. -->
+  <reject-enum-value name="GLTextureRectangleHandle"/>
+</enum-type>
 <enum-type name="QAbstractVideoBuffer::MapMode"/>
 <enum-type name="QCameraImageCapture::Error"/>
 <enum-type name="QCameraImageCapture::DriveMode"/>
@@ -52,6 +63,7 @@
 <enum-type name="QCamera::Status"/>
 <enum-type name="QCamera::Error"/>
 <enum-type name="QCamera::CaptureMode" flags="QCamera::CaptureModes"/>
+<enum-type name="QCamera::Feature" flags="QCamera::Features" since-version="6"/>
 <enum-type name="QMediaPlayer::State"/>
 <enum-type name="QMediaPlayer::MediaStatus"/>
 <enum-type name="QMediaPlayer::Error"/>
@@ -75,7 +87,7 @@
 <enum-type name="QMediaStreamsControl::StreamType"/>
 
 <namespace-type name="QAudio"/>
-<namespace-type name="QMultimedia"/>
+<namespace-type name="QMultimedia" since-version="5"/>
 
 <object-type name="QAbstractVideoBuffer"/>
 <object-type name="QAbstractVideoSurface"/>
@@ -108,7 +120,7 @@
 <object-type name="QMediaService"/>
 <object-type name="QMediaTimeInterval"/>
 <object-type name="QMediaTimeRange"/>
-<object-type name="QMultimedia"/>
+<object-type name="QMultimedia" before-version="5"/>
 <object-type name="QRadioData"/>
 <object-type name="QRadioTuner"/>
 <object-type name="QSound"/>
@@ -116,10 +128,18 @@
 <object-type name="QSoundEffect"/>
 <object-type name="QVideoEncoderSettings"/>
 <object-type name="QVideoFrame"/>
+<group since-version="6">
+<enum-type name="QVideoFrame::HandleType"/>
+<enum-type name="QVideoFrame::MapMode"/>
+<enum-type name="QVideoFrame::RotationAngle"/>
+<object-type name="QVideoFrame::PaintOptions"/>
+<enum-type name="QVideoFrame::PaintOptions::PaintFlag" flags="QVideoFrame::PaintOptions::PaintFlags"/>
+</group>
 <object-type name="QVideoProbe"/>
 <object-type name="QVideoSurfaceFormat"/>
 <object-type name="QCameraViewfinder"/>
 <object-type name="QGraphicsVideoItem"/>
+<rejection class="QGraphicsVideoItem" enum-name="enum_1"/>
 <object-type name="QVideoWidget"/>
 <object-type name="QAbstractAudioDeviceInfo"/>
 <object-type name="QAbstractAudioInput"/>
@@ -175,5 +195,30 @@
 <enum-type name="QAudio::VolumeScale"/>
 
 <object-type name="QMediaServiceProviderPlugin"/>
+
+<group since-version="6">
+  <object-type name="QAudioDevice"/>
+  <object-type name="QAudioSink"/>
+  <object-type name="QAudioSource"/>
+  <object-type name="QCameraDevice"/>
+  <object-type name="QCameraFormat"/>
+  <object-type name="QCapturableWindow" since-version="6.6"/>
+  <object-type name="QImageCapture"/>
+  <object-type name="QMediaCaptureSession"/>
+  <object-type name="QMediaDevices"/>
+  <object-type name="QMediaFormat"/>
+  <enum-type name="QMediaFormat::ResolveFlags"/>
+  <object-type name="QMediaTimeRange::Interval"/>
+  <object-type name="QScreenCapture" since-version="6.5"/>
+  <object-type name="QVideoFrameFormat"/>
+  <enum-type name="QVideoFrameFormat::ColorSpace"/>
+  <enum-type name="QVideoFrameFormat::ColorRange"/>
+  <enum-type name="QVideoFrameFormat::Direction"/>
+  <enum-type name="QVideoFrameFormat::YCbCrColorSpace"/>
+  <enum-type name="QVideoFrameFormat::PixelFormat"/>
+  <enum-type name="QVideoFrameFormat::ColorTransfer"/>
+  <object-type name="QVideoSink"/>
+  <object-type name="QWindowCapture" since-version="6.6"/>
+</group>
 
 </typesystem>

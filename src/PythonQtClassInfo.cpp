@@ -49,6 +49,14 @@
 
 QHash<QByteArray, int> PythonQtMethodInfo::_parameterTypeDict;
 
+// List of registered global namespace wrappers that might contain a top-level enum definition
+QList<PythonQtClassInfo*> PythonQtClassInfo::_globalNamespaceWrappers;
+
+// List of words that are reserved in Python, but not in C++, so they need escaping
+QSet<QByteArray> PythonQtClassInfo::_reservedNames{
+  "None", "True", "False"
+};
+
 PythonQtClassInfo::PythonQtClassInfo() {
   _meta = nullptr;
   _constructors = nullptr;
@@ -279,7 +287,7 @@ bool PythonQtClassInfo::lookForEnumAndCache(const QMetaObject* meta, const char*
     if (e.isFlag()) continue;
     
     for (int j=0; j < e.keyCount(); j++) {
-      if (qstrcmp(e.key(j), memberName)==0) {
+      if (escapeReservedNames(e.key(j)) == memberName) {
         PyObject* enumType = findEnumWrapper(e.name());
         if (enumType) {
           PythonQtObjectPtr enumValuePtr;
@@ -846,11 +854,20 @@ PyObject* PythonQtClassInfo::findEnumWrapper(const QByteArray& name, PythonQtCla
       return nullptr;
     }
   }
+  PyObject* enumWrapper = nullptr;
   if (localScope) {
-    return localScope->findEnumWrapper(name);
-  } else {
-    return nullptr;
+    enumWrapper = localScope->findEnumWrapper(name);
+  } 
+  if (!enumWrapper) {
+    // it might be a top-level enum - search in all currently registered global namespace wrappers
+    for (PythonQtClassInfo* globalWrapper : _globalNamespaceWrappers) {
+      enumWrapper = globalWrapper->findEnumWrapper(name);
+      if (enumWrapper) {
+        break;
+      }
+    }
   }
+  return enumWrapper;
 }
 
 void PythonQtClassInfo::createEnumWrappers(const QMetaObject* meta)
@@ -859,6 +876,13 @@ void PythonQtClassInfo::createEnumWrappers(const QMetaObject* meta)
     QMetaEnum e = meta->enumerator(i);
     PythonQtObjectPtr p;
     p.setNewRef(PythonQtPrivate::createNewPythonQtEnumWrapper(e.name(), _pythonQtClassWrapper));
+    // add enum values to the enum type itself, in case enum value names are so generic
+    // that they are not unique
+    for (int j = 0; j < e.keyCount(); j++) {
+      PythonQtObjectPtr enumValuePtr;
+      enumValuePtr.setNewRef(PythonQtPrivate::createEnumValueInstance(p.object(), e.value(j)));
+      p.addVariable(escapeReservedNames(e.key(j)), enumValuePtr.toLocalVariant());
+    }
     _enumWrappers.append(p);
   }
 }
@@ -1002,6 +1026,21 @@ PythonQtVoidPtrCB* PythonQtClassInfo::referenceCountingUnrefCB()
     updateRefCountingCBs();
   }
   return _unrefCallback;
+}
+
+QByteArray PythonQtClassInfo::escapeReservedNames(const QByteArray& name)
+{
+  if (_reservedNames.contains(name)) {
+    return name + "_";
+  }
+  else {
+    return name;
+  }
+}
+
+void PythonQtClassInfo::addGlobalNamespaceWrapper(PythonQtClassInfo* namespaceWrapper)
+{
+  _globalNamespaceWrappers.insert(0, namespaceWrapper);
 }
 
 void PythonQtClassInfo::updateRefCountingCBs()

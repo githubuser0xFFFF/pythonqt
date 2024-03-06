@@ -4,16 +4,12 @@
 # $Source$
 # --------------------------------------------------
 
-contains(QT_MAJOR_VERSION, 6) {
-    TARGET = PythonQt-Qt6-PythonXY
-} else {
-    TARGET = PythonQt-Qt5-PythonXY
-}
+TARGET = PythonQt-Qt$${QT_MAJOR_VERSION}-PythonXY
 TEMPLATE = lib
 
 DESTDIR    = ../lib
 
-CONFIG += qt
+CONFIG += qt msvc_mp
 CONFIG -= flat
 
 # allow to choose static linking through the environment variable PYTHONQT_STATIC

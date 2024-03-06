@@ -40,14 +40,15 @@
 ****************************************************************************/
 
 #include <cstdio>
+#include <iostream>
 
-#include "main.h"
 #include "asttoxml.h"
 #include "reporthandler.h"
 #include "typesystem.h"
 #include "generatorset.h"
 #include "fileout.h"
 #include "control.h"
+#include "pp.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -57,39 +58,163 @@
 
 void displayHelp(GeneratorSet *generatorSet);
 
-static unsigned int getQtVersion(const QString& commandLineIncludes)
+namespace
 {
-  QRegularExpression re("#define\\s+QTCORE_VERSION\\s+0x([0-9a-f]+)", QRegularExpression::CaseInsensitiveOption);
-  for (const QString& includeDir : Preprocess::getIncludeDirectories(commandLineIncludes)) {
-    QFileInfo fi(QDir(includeDir), "qtcoreversion.h");
-    if (fi.exists()) {
-      QString filePath = fi.absoluteFilePath();
-      QFile f(filePath);
-      if (f.open(QIODevice::ReadOnly)) {
-        QTextStream ts(&f);
-        QString content = ts.readAll();
-        f.close();
-        auto match = re.match(content);
-        if (match.isValid()) {
-          unsigned int result;
-          bool ok;
-          result = match.captured(1).toUInt(&ok, 16);
-          if (!ok) {
-            printf("Could not parse Qt version in file [%s] (looked for #define QTCORE_VERSION)\n",
-              qPrintable(filePath));
-          }
-          return result;
+
+    QStringList getIncludeDirectories(const QString &commandLineIncludes)
+    {
+      QStringList includes;
+      includes << QString(".");
+
+      QChar pathSplitter = QDir::listSeparator();
+
+      // Environment PYTHONQT_INCLUDE
+      QString includePath = getenv("PYTHONQT_INCLUDE");
+      if (!includePath.isEmpty())
+        includes += includePath.split(pathSplitter, Qt::SkipEmptyParts);
+
+      // Includes from the command line
+      if (!commandLineIncludes.isEmpty())
+        includes += commandLineIncludes.split(pathSplitter, Qt::SkipEmptyParts);
+      for (auto it = includes.begin(); it != includes.end();)
+      {
+        if (!QDir(*it).exists())
+        {
+          qWarning("Include path %s does not exist, ignoring it.", it->toUtf8().constData());
+          it = includes.erase(it);
+        }
+        else
+        {
+          ++it;
         }
       }
+
+      // Include Qt
+      QString qtdir = getenv("QTDIR");
+      if (qtdir.isEmpty() || !QDir(qtdir).exists(qtdir))
+      {
+        QString reason = "The QTDIR environment variable " + qtdir.isEmpty() ?
+                         "is not set. " : "points to a non-existing directory. ";
+#if defined(Q_OS_MAC)
+        qWarning((reason + "Assuming standard binary install using frameworks.").toUtf8().constData());
+            QString frameworkDir = "/Library/Frameworks";
+            includes << (frameworkDir + "/QtXml.framework/Headers");
+            includes << (frameworkDir + "/QtNetwork.framework/Headers");
+            includes << (frameworkDir + "/QtCore.framework/Headers");
+            includes << (frameworkDir + "/QtGui.framework/Headers");
+            includes << (frameworkDir + "/QtOpenGL.framework/Headers");
+            includes << frameworkDir;
+#else
+        qWarning((reason + "This may cause problems with finding the necessary include files.").toUtf8().constData());
+#endif
+      }
+      else
+      {
+        std::cout << "-------------------------------------------------------------" << std::endl;
+        std::cout << "Using QT at: " << qtdir.toLocal8Bit().constData() << std::endl;
+        std::cout << "-------------------------------------------------------------" << std::endl;
+        qtdir += "/include";
+        includes << (qtdir + "/QtXml");
+        includes << (qtdir + "/QtNetwork");
+        includes << (qtdir + "/QtCore");
+        includes << (qtdir + "/QtGui");
+        includes << (qtdir + "/QtOpenGL");
+        includes << qtdir;
+      }
+      return includes;
     }
-  }
-  printf("Error: Could not find Qt version (looked for qtcoreversion.h in %s)\n",
-    qPrintable(commandLineIncludes));
-  return 0;
-}
+
+    bool
+    preprocess(const QString &sourceFile, const QString &targetFile, const QString &commandLineIncludes = QString())
+    {
+      rpp::pp_environment env;
+      rpp::pp preprocess(env);
+
+      rpp::pp_null_output_iterator null_out;
+
+      const char *ppconfig = ":/trolltech/generator/parser/rpp/pp-qt-configuration";
+
+      QFile file(ppconfig);
+      if (!file.open(QFile::ReadOnly))
+      {
+        fprintf(stderr, "Preprocessor configuration file not found '%s'\n", ppconfig);
+        return false;
+      }
+
+      QByteArray ba = file.readAll();
+      file.close();
+      preprocess.operator()(ba.constData(), ba.constData() + ba.size(), null_out);
+
+      foreach(QString
+      include, getIncludeDirectories(commandLineIncludes)) {
+        preprocess.push_include_path(QDir::toNativeSeparators(include).toStdString());
+      }
+
+      QString currentDir = QDir::current().absolutePath();
+      QFileInfo sourceInfo(sourceFile);
+      QDir::setCurrent(sourceInfo.absolutePath());
+
+      std::string result;
+      result.reserve(20 * 1024); // 20K
+
+      result += "# 1 \"builtins\"\n";
+      result += "# 1 \"";
+      result += sourceFile.toStdString();
+      result += "\"\n";
+
+      preprocess.file(sourceInfo.fileName().toStdString(),
+                      rpp::pp_output_iterator<std::string>(result));
+
+      QDir::setCurrent(currentDir);
+
+      QFile f(targetFile);
+      if (!f.open(QIODevice::WriteOnly | QIODevice::Text))
+      {
+        fprintf(stderr, "Failed to write preprocessed file: %s\n", qPrintable(targetFile));
+      }
+      f.write(result.c_str(), result.length());
+
+      return true;
+    }
+
+    unsigned int getQtVersion(const QString &commandLineIncludes)
+    {
+      QRegularExpression re("#define\\s+QTCORE_VERSION\\s+0x([0-9a-f]+)", QRegularExpression::CaseInsensitiveOption);
+      for (const QString &includeDir: getIncludeDirectories(commandLineIncludes))
+      {
+        QFileInfo fi(QDir(includeDir), "qtcoreversion.h");
+        if (fi.exists())
+        {
+          QString filePath = fi.absoluteFilePath();
+          QFile f(filePath);
+          if (f.open(QIODevice::ReadOnly))
+          {
+            QTextStream ts(&f);
+            QString content = ts.readAll();
+            f.close();
+            auto match = re.match(content);
+            if (match.isValid())
+            {
+              unsigned int result;
+              bool ok;
+              result = match.captured(1).toUInt(&ok, 16);
+              if (!ok)
+              {
+                printf("Could not parse Qt version in file [%s] (looked for #define QTCORE_VERSION)\n",
+                       qPrintable(filePath));
+              }
+              return result;
+            }
+          }
+        }
+      }
+      printf("Error: Could not find Qt version (looked for qtcoreversion.h in %s)\n",
+             qPrintable(commandLineIncludes));
+      return 0;
+    }
+};
 
 
-#include <QDebug>
 int main(int argc, char *argv[])
 {
     ReportHandler::setContext("Arguments");
@@ -102,7 +227,6 @@ int main(int argc, char *argv[])
     QString fileName;
     QString typesystemFileName;
     QString pp_file = ".preprocessed.tmp";
-    QStringList rebuild_classes;
 
     QMap<QString, QString> args;
     unsigned int qtVersion{};
@@ -203,13 +327,17 @@ int main(int argc, char *argv[])
     printf("Parsing typesystem file [%s]\n", qPrintable(typesystemFileName));
     fflush(stdout);
     ReportHandler::setContext("Typesystem");
-    if (!TypeDatabase::instance()->parseFile(typesystemFileName, qtVersion))
+    if (TypeDatabase::instance()->parseFile(typesystemFileName, qtVersion)) {
+        TypeDatabase::instance()->finalSetup();
+    }
+    else {
         qFatal("Cannot parse file: '%s'", qPrintable(typesystemFileName));
+    }
 
     printf("PreProcessing - Generate [%s] using [%s] and include-paths [%s]\n",
       qPrintable(pp_file), qPrintable(fileName), qPrintable(args.value("include-paths")));
     ReportHandler::setContext("Preprocess");
-    if (!Preprocess::preprocess(fileName, pp_file, args.value("include-paths"))) {
+    if (!preprocess(fileName, pp_file, args.value("include-paths"))) {
         fprintf(stderr, "Preprocessor failed on file: '%s'\n", qPrintable(fileName));
         return 1;
     }
@@ -238,11 +366,7 @@ int main(int argc, char *argv[])
 
 
 void displayHelp(GeneratorSet* generatorSet) {
-#if defined(Q_OS_WIN32)
-    char path_splitter = ';';
-#else
-    char path_splitter = ':';
-#endif
+    const auto path_splitter = QDir::listSeparator().toLatin1();
     printf("Usage:\n  generator [options] header-file typesystem-file\n\n");
     printf("Available options:\n\n");
     printf("General:\n");

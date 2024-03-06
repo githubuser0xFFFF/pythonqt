@@ -230,6 +230,61 @@ void Parser::keepTrackDebug()
 #endif
 }
 
+bool Parser::skipAlignas()
+{
+  // we are currently not interested in alignas, so we just skip it
+  if (token_stream.lookAhead() == Token_alignas)
+  {
+    nextToken();
+    if (token_stream.lookAhead() == '(')
+    {
+      if (skip('(', ')'))
+      {
+        nextToken();
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
+bool Parser::skipAttributes()
+{
+  bool any = false;
+  while (true) {
+    if (token_stream.lookAhead() == Token___attribute__)
+    {
+      parse_Attribute__();
+      any = true;
+    }
+    else if (token_stream.lookAhead() == '[' && token_stream.lookAhead(1) == '[')
+    {
+      nextToken();
+      while (true)
+      {
+        nextToken();
+        int tk = token_stream.lookAhead();
+        if (tk == Token_EOF)
+        {
+          break;
+        }
+        else if (tk == ']' && token_stream.lookAhead(1) == ']') // this has no separate token because "]]" can occur in other contexts
+        {
+          nextToken();
+          nextToken();
+          break;
+        }
+      }
+      any = true;
+    }
+    else
+    {
+      break;
+    }
+  }
+  return any;
+}
+
 bool Parser::skipUntil(int token)
 {
   while (token_stream.lookAhead())
@@ -385,7 +440,10 @@ bool Parser::parseName(NameAST *&node, bool acceptTemplateId)
   std::size_t start = token_stream.cursor();
 
   WinDeclSpecAST *winDeclSpec = 0;
-  parseWinDeclSpec(winDeclSpec);
+  while (skipAlignas() || (!winDeclSpec && parseWinDeclSpec(winDeclSpec)))
+  {
+    ;
+  }
 
   NameAST *ast = CreateNode<NameAST>(_M_pool);
 
@@ -400,7 +458,7 @@ bool Parser::parseName(NameAST *&node, bool acceptTemplateId)
   while (true)
     {
       UnqualifiedNameAST *n = 0;
-      if (!parseUnqualifiedName(n))
+      if (!parseUnqualifiedName(n, acceptTemplateId))
         return false;
 
       if (token_stream.lookAhead() == Token_scope)
@@ -419,12 +477,6 @@ bool Parser::parseName(NameAST *&node, bool acceptTemplateId)
       else
         {
           Q_ASSERT(n != 0);
-          if (!acceptTemplateId)
-            {
-              rewind(n->start_token);
-              parseUnqualifiedName(n, false);
-            }
-
           ast->unqualified_name = n;
           break;
         }
@@ -511,15 +563,25 @@ bool Parser::parseDeclaration(DeclarationAST *&node)
     case Token_export:
       return parseTemplateDeclaration(node);
 
+    case Token_inline:
+      if (token_stream.lookAhead(1) == Token_namespace)
+        {
+          nextToken();
+          // handle like a normal namespace for now
+          return parseNamespace(node);
+        }
+      // else fallthrough
     default:
       {
+        skipAttributes();
+
         const ListNode<std::size_t> *cv = 0;
-        parseCvQualify(cv);
-
-        const ListNode<std::size_t> *storageSpec = 0;
-        parseStorageClassSpecifier(storageSpec);
-
-        parseCvQualify(cv);
+        const ListNode<std::size_t>* storageSpec = 0;
+        // consume all qualifiers/specifiers
+        while (parseCvQualify(cv) || parseStorageClassSpecifier(storageSpec))
+        {
+          ;
+        }
 
         TypeSpecifierAST *spec = 0;
         if (parseEnumSpecifier(spec)
@@ -702,7 +764,7 @@ bool Parser::parseUsing(DeclarationAST *&node)
       nextToken();
     }
 
-  if (!parseName(ast->name))
+  if (!parseName(ast->name, /*acceptTemplateId=*/true))
     return false;
 
   ADVANCE(';', ";");
@@ -1014,6 +1076,15 @@ bool Parser::parseOperator(OperatorAST *&node)
           ast->close = token_stream.cursor();
           nextToken();
         }
+      else if (token_stream.lookAhead() == Token_string_literal
+               && token_stream.lookAhead(1) == Token_identifier)
+        {
+          // string literal operator
+          ast->op = token_stream.cursor();
+          nextToken();
+          // skip string literal suffix for now
+          nextToken();
+        }
       else
         {
           return false;
@@ -1032,7 +1103,7 @@ bool Parser::parseCvQualify(const ListNode<std::size_t> *&node)
 
   int tk;
   while (0 != (tk = token_stream.lookAhead())
-         && (tk == Token_const || tk == Token_constexpr ||
+         && (tk == Token_const ||
              tk == Token_volatile || tk == Token_mutable))
     {
       node = snoc(node, token_stream.cursor(), _M_pool);
@@ -1081,6 +1152,11 @@ bool Parser::parseSimpleTypeSpecifier(TypeSpecifierAST *&node,
     {
       ast->integrals = integrals;
     }
+  else if (token_stream.lookAhead() == Token_auto)
+    {
+      nextToken();
+      ast->is_auto = true;
+    }
   else if (token_stream.lookAhead() == Token___typeof ||
            token_stream.lookAhead() == Token_decltype)
     {
@@ -1097,7 +1173,7 @@ bool Parser::parseSimpleTypeSpecifier(TypeSpecifierAST *&node,
             {
               ast->type_id = 0;
               rewind(saved);
-              parseUnaryExpression(ast->expression);
+              parseConditionalExpression(ast->expression);
             }
           ADVANCE(')', ")");
         }
@@ -1113,6 +1189,10 @@ bool Parser::parseSimpleTypeSpecifier(TypeSpecifierAST *&node,
     }
   else
     {
+      if (token_stream.lookAhead() == Token_typename)
+        {
+          nextToken(); // simply skip for now
+        }
       if (!parseName(ast->name, true))
         {
           ast->name = 0;
@@ -1182,6 +1262,7 @@ bool Parser::parseTemplateArgument(TemplateArgumentAST *&node)
   ExpressionAST *expr = 0;
 
   if (!parseTypeId(typeId) || (token_stream.lookAhead() != ','
+                               && token_stream.lookAhead() != Token_ellipsis
                                && token_stream.lookAhead() != '>'
                                && token_stream.lookAhead() != Token_shift_right))
     {
@@ -1195,6 +1276,11 @@ bool Parser::parseTemplateArgument(TemplateArgumentAST *&node)
   ast->type_id = typeId;
   ast->expression = expr;
 
+  if (token_stream.lookAhead() == Token_ellipsis) {
+    nextToken();
+    ast->variadic = true;
+  }
+
   UPDATE_POS(ast, start, token_stream.cursor());
   node = ast;
 
@@ -1204,6 +1290,8 @@ bool Parser::parseTemplateArgument(TemplateArgumentAST *&node)
 bool Parser::parseTypeSpecifier(TypeSpecifierAST *&node)
 {
   std::size_t start = token_stream.cursor();
+
+  skipAttributes();
 
   const ListNode<std::size_t> *cv = 0;
   parseCvQualify(cv);
@@ -1223,7 +1311,7 @@ bool Parser::parseTypeSpecifier(TypeSpecifierAST *&node)
   return true;
 }
 
-bool Parser::parseDeclarator(DeclaratorAST *&node)
+bool Parser::parseDeclarator(DeclaratorAST *&node, bool asParameter)
 {
   std::size_t start = token_stream.cursor();
 
@@ -1255,14 +1343,23 @@ bool Parser::parseDeclarator(DeclaratorAST *&node)
         {
           // unnamed bitfield
         }
-      else if (parseName(declId, true))
-        {
-          ast->id = declId;
-        }
       else
         {
-          rewind(start);
-          return false;
+          if (asParameter && token_stream.lookAhead() == Token_ellipsis)
+            {
+              // parameter pack
+              nextToken();
+              ast->packedParameter = true;
+            }
+          if (parseName(declId, true))
+            {
+              ast->id = declId;
+            }
+          else
+            {
+              rewind(start);
+              return false;
+            }
         }
 
       if (token_stream.lookAhead() == ':')
@@ -1312,53 +1409,27 @@ bool Parser::parseDeclarator(DeclaratorAST *&node)
         return false;
       }
 
-    std::size_t index = token_stream.cursor();
-    if (token_stream.lookAhead() == '(')
+    if (parseDeclaratorParametersAndSuffix(ast)) {
+
+      if (token_stream.lookAhead() == Token_identifier &&
+        token_stream.symbol(token_stream.cursor())->as_string() == "override")
       {
         nextToken();
-
-        ParameterDeclarationClauseAST *params = 0;
-        if (!parseParameterDeclarationClause(params))
-          {
-            rewind(index);
-            goto update_pos;
-          }
-
-        ast->parameter_declaration_clause = params;
-
-        if (token_stream.lookAhead() != ')')
-          {
-            rewind(index);
-            goto update_pos;
-          }
-
-        nextToken();  // skip ')'
-
-        parseCvQualify(ast->fun_cv);
-        parseExceptionSpecification(ast->exception_spec);
-        if (token_stream.lookAhead() == Token_identifier) {
-          const NameSymbol *name_symbol = token_stream.symbol(token_stream.cursor());
-          QString name = name_symbol->as_string();
-          if (name == "override") {
-            nextToken();
-            ast->_override = true;
-          }
-        }
-        if (token_stream.lookAhead() == Token___attribute__)
-          {
-              parse_Attribute__();
-          }
+        ast->_override = true;
       }
+      skipAttributes();
 
-    if (skipParen)
+      if (skipParen)
       {
         if (token_stream.lookAhead() != ')')
-          {
-            reportError(("')' expected"));
-          }
+        {
+          reportError(("')' expected"));
+        }
         else
           nextToken();
       }
+
+    }
   }
 
  update_pos:
@@ -1438,31 +1509,7 @@ bool Parser::parseAbstractDeclarator(DeclaratorAST *&node)
         return false;
       }
 
-    int index = (int) token_stream.cursor();
-    if (token_stream.lookAhead() == '(')
-      {
-        nextToken();
-
-        ParameterDeclarationClauseAST *params = 0;
-        if (!parseParameterDeclarationClause(params))
-          {
-            rewind(index);
-            goto update_pos;
-          }
-
-        ast->parameter_declaration_clause = params;
-
-        if (token_stream.lookAhead() != ')')
-          {
-            rewind(index);
-            goto update_pos;
-          }
-
-        nextToken();  // skip ')'
-
-        parseCvQualify(ast->fun_cv);
-        parseExceptionSpecification(ast->exception_spec);
-      }
+    parseDeclaratorParametersAndSuffix(ast);
   }
 
  update_pos:
@@ -1475,14 +1522,57 @@ bool Parser::parseAbstractDeclarator(DeclaratorAST *&node)
   return true;
 }
 
+bool Parser::parseDeclaratorParametersAndSuffix(DeclaratorAST* ast)
+{
+  std::size_t index = token_stream.cursor();
+  if (token_stream.lookAhead() == '(')
+  {
+    nextToken();
+
+    ParameterDeclarationClauseAST* params = 0;
+    if (!parseParameterDeclarationClause(params))
+    {
+      rewind(index);
+      return false;
+    }
+
+    ast->parameter_declaration_clause = params;
+
+    if (token_stream.lookAhead() != ')')
+    {
+      rewind(index);
+      return false;
+    }
+
+    nextToken();  // skip ')'
+
+    parseCvQualify(ast->fun_cv);
+    if (token_stream.lookAhead() == '&')
+    {
+      ast->valueRef = DeclaratorAST::Lvalue;
+      nextToken();
+    }
+    else if (token_stream.lookAhead() == Token_and)
+    {
+      ast->valueRef = DeclaratorAST::Rvalue;
+      nextToken();
+    }
+    parseExceptionSpecification(ast->exception_spec);
+    return true;
+  }
+  return false;
+}
+
 bool Parser::parseEnumSpecifier(TypeSpecifierAST *&node)
 {
   std::size_t start = token_stream.cursor();
 
   CHECK(Token_enum);
 
+  bool enum_class{};
   if (token_stream.lookAhead() == Token_class)
     {
+      enum_class = true;
       nextToken();
     }
 
@@ -1509,6 +1599,7 @@ bool Parser::parseEnumSpecifier(TypeSpecifierAST *&node)
 
   EnumSpecifierAST *ast = CreateNode<EnumSpecifierAST>(_M_pool);
   ast->name = name;
+  ast->is_enum_class = enum_class;
 
   EnumeratorAST *enumerator = 0;
   if (parseEnumerator(enumerator))
@@ -1699,7 +1790,8 @@ bool Parser::parseStorageClassSpecifier(const ListNode<std::size_t> *&node)
 
   int tk;
   while (0 != (tk = token_stream.lookAhead())
-         && (tk == Token_friend || tk == Token_auto
+         && (tk == Token_friend
+             // || tk == Token_auto  // I believe "auto" isn't used as storage class specifier in Qt, and it collides with the type-specifier of the same name
              || tk == Token_register || tk == Token_static
              || tk == Token_extern))
     {
@@ -1716,7 +1808,7 @@ bool Parser::parseFunctionSpecifier(const ListNode<std::size_t> *&node)
 
   int tk;
   while (0 != (tk = token_stream.lookAhead())
-         && (tk == Token_inline || tk == Token_virtual
+         && (tk == Token_constexpr || tk == Token_inline || tk == Token_virtual
              || tk == Token_explicit || tk == Token_Q_INVOKABLE))
     {
       node = snoc(node, token_stream.cursor(), _M_pool);
@@ -1860,7 +1952,7 @@ bool Parser::parseParameterDeclaration(ParameterDeclarationAST *&node)
   int index = (int) token_stream.cursor();
 
   DeclaratorAST *decl = 0;
-  if (!parseDeclarator(decl))
+  if (!parseDeclarator(decl, /*asParameter=*/true))
     {
       rewind(index);
 
@@ -1983,10 +2075,9 @@ bool Parser::parseClassSpecifier(TypeSpecifierAST *&node)
   nextToken();
 
   WinDeclSpecAST *winDeclSpec = 0;
-  parseWinDeclSpec(winDeclSpec);
-
-  if (token_stream.lookAhead() == Token___attribute__) {
-      parse_Attribute__();
+  while (skipAttributes() || skipAlignas() || (!winDeclSpec && parseWinDeclSpec(winDeclSpec)))
+  {
+    ;
   }
 
   while (token_stream.lookAhead() == Token_identifier
@@ -2136,12 +2227,12 @@ bool Parser::parseMemberSpecification(DeclarationAST *&node)
   rewind(start);
 
   const ListNode<std::size_t> *cv = 0;
-  parseCvQualify(cv);
-
-  const ListNode<std::size_t> *storageSpec = 0;
-  parseStorageClassSpecifier(storageSpec);
-
-  parseCvQualify(cv);
+  const ListNode<std::size_t>* storageSpec = 0;
+  // consume all qualifiers/specifiers
+  while (parseCvQualify(cv) || parseStorageClassSpecifier(storageSpec))
+  {
+    ;
+  }
 
   TypeSpecifierAST *spec = 0;
   if (parseEnumSpecifier(spec) || parseClassSpecifier(spec))
@@ -3195,12 +3286,12 @@ bool Parser::parseBlockDeclaration(DeclarationAST *&node)
   std::size_t start = token_stream.cursor();
 
   const ListNode<std::size_t> *cv = 0;
-  parseCvQualify(cv);
-
   const ListNode<std::size_t> *storageSpec = 0;
-  parseStorageClassSpecifier(storageSpec);
-
-  parseCvQualify(cv);
+  // consume all qualifiers/specifiers
+  while (parseCvQualify(cv) || parseStorageClassSpecifier(storageSpec))
+  {
+    ;
+  }
 
   TypeSpecifierAST *spec = 0;
   if (!parseTypeSpecifierOrClassSpec(spec))
@@ -3283,28 +3374,21 @@ bool Parser::parseDeclarationInternal(DeclarationAST *&node)
   // that is for the case '__declspec(dllexport) int ...' or
   // '__declspec(dllexport) inline int ...', etc.
   WinDeclSpecAST *winDeclSpec = 0;
-  parseWinDeclSpec(winDeclSpec);
-
   const ListNode<std::size_t>* cv = 0;
-  parseCvQualify(cv);
-
-  const ListNode<std::size_t> *funSpec = 0;
-  bool hasFunSpec = parseFunctionSpecifier(funSpec);
-
-  if (!cv)
-    parseCvQualify(cv);
-
-  const ListNode<std::size_t> *storageSpec = 0;
-  bool hasStorageSpec = parseStorageClassSpecifier(storageSpec);
-
-  if (hasStorageSpec && !hasFunSpec)
-    hasFunSpec = parseFunctionSpecifier(funSpec);
-
-  // that is for the case 'friend __declspec(dllexport) ....'
-  parseWinDeclSpec(winDeclSpec);
-
-  if (!cv)
-    parseCvQualify(cv);
+  const ListNode<std::size_t>* funSpec = 0;
+  const ListNode<std::size_t>* storageSpec = 0;
+  // since it seems that the various specifiers can come in almost any order,
+  // so just consume then until no specifiers are left.
+  // Luckily the parse methods can be called multiple times, they just add to existing nodes.
+  while (skipAttributes() ||
+         skipAlignas() ||
+         (!winDeclSpec && parseWinDeclSpec(winDeclSpec)) ||
+         parseCvQualify(cv) ||
+         parseFunctionSpecifier(funSpec) ||
+         parseStorageClassSpecifier(storageSpec))
+  {
+    ;
+  }
 
   int index = (int) token_stream.cursor();
   NameAST *name = 0;
@@ -3394,8 +3478,7 @@ bool Parser::parseDeclarationInternal(DeclarationAST *&node)
  start_decl:
   rewind(index);
 
-  if ((token_stream.lookAhead() == Token_const ||
-       token_stream.lookAhead() == Token_constexpr)
+  if (token_stream.lookAhead() == Token_const
       && token_stream.lookAhead(1) == Token_identifier
       && token_stream.lookAhead(2) == '=')
     {
@@ -3428,8 +3511,7 @@ bool Parser::parseDeclarationInternal(DeclarationAST *&node)
     {
       Q_ASSERT(spec != 0);
 
-      if (!hasFunSpec)
-        parseFunctionSpecifier(funSpec);         // e.g. "void inline"
+      parseFunctionSpecifier(funSpec);         // e.g. "void inline"
 
       spec->cv = cv;
 
@@ -3440,7 +3522,7 @@ bool Parser::parseDeclarationInternal(DeclarationAST *&node)
 
       if (token_stream.lookAhead() != ';')
         {
-          if (parseInitDeclarator(decl) && token_stream.lookAhead() == '{')
+          if (parseInitDeclarator(decl) && (token_stream.lookAhead() == '{' || token_stream.lookAhead() == Token_arrow))
             {
               // function definition
               maybeFunctionDefinition = true;
@@ -3455,6 +3537,18 @@ bool Parser::parseDeclarationInternal(DeclarationAST *&node)
                 }
             }
         }
+
+      if (token_stream.lookAhead() == Token_arrow) {
+        // trailing return type, used in conjuction with "auto" return type
+        nextToken();
+        TypeSpecifierAST* trailingReturnTypeSpec = 0;
+        if (!parseTypeSpecifier(trailingReturnTypeSpec)) {
+          // todo: replace "auto" return type? But I doubt we can handle these return types anyway.
+          syntaxError();
+          return false;
+        }
+        maybeFunctionDefinition = true;
+      }
 
       switch(token_stream.lookAhead())
         {
@@ -3624,6 +3718,7 @@ bool Parser::parsePrimaryExpression(ExpressionAST *&node)
       parseStringLiteral(ast->literal);
       break;
 
+    case Token_ellipsis:       // "..." can occur in constexpr of variadic templates
     case Token_number_literal:
     case Token_char_literal:
     case Token_true:
@@ -3650,8 +3745,19 @@ bool Parser::parsePrimaryExpression(ExpressionAST *&node)
       CHECK(')');
       break;
 
+    case '{':
+      nextToken();
+
+      // support for new-style initializers
+      if (token_stream.lookAhead() != '}' && !parseExpression(ast->sub_expression)) {
+        return false;
+      }
+
+      CHECK('}');
+      break;
+
     default:
-      if (!parseName(ast->name))
+      if (!parseName(ast->name, true))   // this can also be a template
         return false;
 
       break;
@@ -3887,11 +3993,19 @@ bool Parser::parsePostfixExpression(ExpressionAST *&node)
 
  L_no_rewind:
   if (!expr && parseSimpleTypeSpecifier(typeSpec)
-      && token_stream.lookAhead() == '(')
+      && (token_stream.lookAhead() == '(' || token_stream.lookAhead() == '{'))
     {
-      nextToken(); // skip '('
+      int tk = token_stream.lookAhead();
+      nextToken(); // skip '(' or '{'
       parseCommaExpression(expr);
-      CHECK(')');
+      if (tk == '(')
+        {
+          CHECK(')');
+        }
+      else
+        {
+          CHECK('}');
+        }
     }
   else if (expr)
     {
@@ -3902,7 +4016,24 @@ bool Parser::parsePostfixExpression(ExpressionAST *&node)
       typeSpec = 0;
       rewind(start);
 
-      if (!parsePrimaryExpression(expr))
+      if (token_stream.lookAhead() == Token_noexcept)
+      {
+        nextToken();
+        CHECK('(');
+        ExpressionAST* arg_expr = 0;
+        if (!parseExpression(arg_expr))
+        {
+          return false;
+        }
+        CHECK(')');
+
+        // make noexcept() in expressions an unary expression
+        UnaryExpressionAST* ast = CreateNode<UnaryExpressionAST>(_M_pool);
+        ast->op = start;
+        ast->expression = arg_expr;
+        expr = ast;
+      }
+      else if (!parsePrimaryExpression(expr))
         return false;
     }
 
@@ -3924,6 +4055,12 @@ bool Parser::parsePostfixExpression(ExpressionAST *&node)
     }
   else
     node = expr;
+
+  if (token_stream.lookAhead() == Token_ellipsis) {
+    // ignore ellipsis, it might be something like "Pair<Args1, Args2>...", which might appear
+    // in template arguments of variadic templates
+    nextToken();
+  }
 
   return true;
 }
@@ -3963,6 +4100,12 @@ bool Parser::parseUnaryExpression(ExpressionAST *&node)
       {
         std::size_t sizeof_token = token_stream.cursor();
         nextToken();
+
+        if (token_stream.lookAhead() == Token_ellipsis) {
+          // sizeof... is used on parameter packs - currently we ignore this
+          // todo: handle this
+          nextToken();
+        }
 
         SizeofExpressionAST *ast = CreateNode<SizeofExpressionAST>(_M_pool);
         ast->sizeof_token = sizeof_token;
@@ -4673,18 +4816,14 @@ bool Parser::parseQ_ENUM(DeclarationAST *&node)
 
 bool Parser::parseQ_PROPERTY(DeclarationAST *&node)
 {
-  if (token_stream.lookAhead() != Token_Q_PROPERTY)
-    return false;
-
-  if (token_stream.lookAhead(1) != '(')
+  if (token_stream.lookAhead() != Token_Q_PROPERTY || token_stream.lookAhead(1) != '(')
     return false;
 
   nextToken();
-  nextToken();
 
-  size_t firstToken = token_stream.cursor();
-  while (token_stream.lookAhead() != ')') {
-    nextToken();
+  size_t firstToken = token_stream.cursor()+1;
+  if (!skip('(', ')')) {
+    return false;
   }
   QPropertyAST *ast = CreateNode<QPropertyAST>(_M_pool);
   UPDATE_POS(ast, firstToken, token_stream.cursor());

@@ -78,7 +78,7 @@
  * changed to Qt::endl.
  */
 #if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
-    static const constexpr decltype (Qt::endl) *endl = Qt::endl;
+    static constexpr decltype (Qt::endl) *endl = Qt::endl;
 #endif
 /* END: Qt compatibility. */
 
@@ -549,6 +549,8 @@ public:
 
     virtual bool isNativeIdBased() const { return false; }
 
+    virtual TypeEntry* equivalentType() const { return nullptr; }
+
 private:
     QString m_name;
     Type m_type;
@@ -681,7 +683,8 @@ public:
         : TypeEntry(nspace.isEmpty() ? enumName : nspace + QLatin1String("::") + enumName,
                     EnumType),
           m_flags(0),
-          m_extensible(false)
+          m_extensible(false),
+          m_force_integer(false)
     {
         m_qualifier = nspace;
         m_java_name = enumName;
@@ -726,8 +729,8 @@ public:
     void addEnumValueRejection(const QString &name) { m_rejected_enums << name; }
     QStringList enumValueRejections() const { return m_rejected_enums; }
 
-    void addEnumValueRedirection(const QString &rejected, const QString &usedValue);
-    QString enumValueRedirection(const QString &value) const;
+    bool isEnumClass() const { return m_enum_class; }
+    void setEnumClass(bool enum_class) { m_enum_class = enum_class; }
 
     bool forceInteger() const { return m_force_integer; }
     void setForceInteger(bool force) { m_force_integer = force; }
@@ -742,11 +745,11 @@ private:
     QString m_upper_bound;
 
     QStringList m_rejected_enums;
-    QList<EnumValueRedirection> m_enum_redirections;
 
     FlagsTypeEntry *m_flags;
 
     bool m_extensible;
+    bool m_enum_class;
     bool m_force_integer;
 };
 
@@ -800,6 +803,7 @@ public:
           m_generic_class(false),
           m_createShell(false),
           m_createPromoter(false),
+          m_noCopy(false),
           m_type_flags(0)
     {
         Include inc;
@@ -930,6 +934,9 @@ public:
     bool isGenericClass() const { return m_generic_class; }
     void setGenericClass(bool isGeneric) { m_generic_class = isGeneric; }
 
+    bool hasNoCopy() const { return m_noCopy; }
+    void setNoCopy(bool noCopy) { m_noCopy = noCopy; }
+
 private:
     IncludeList m_extra_includes;
     Include m_include;
@@ -947,6 +954,7 @@ private:
     uint m_generic_class : 1;
     uint m_createShell : 1;
     uint m_createPromoter : 1;
+    uint m_noCopy : 1;
 
     QString m_polymorphic_id_value;
     QString m_lookup_name;
@@ -1007,8 +1015,14 @@ public:
 
     virtual bool isNativeIdBased() const { return true; }
 
+    virtual TypeEntry* equivalentType() const { return _equivalentType; }
+    void setEquivalentType(TypeEntry* typeEntry) { _equivalentType = typeEntry; }
+
 protected:
     ValueTypeEntry(const QString &name, Type t) : ComplexTypeEntry(name, t) { }
+
+private:
+  TypeEntry* _equivalentType{};
 };
 
 
@@ -1220,6 +1234,7 @@ public:
     QString filename() const { return "typesystem.txt"; }
 
     bool parseFile(const QString &filename, unsigned int qtVersion, bool generate = true);
+    void finalSetup();
 
 private:
     bool m_suppressWarnings;

@@ -51,6 +51,7 @@
 #include <QtCore/QString>
 #include <QtCore/QStringList>
 #include <QtCore/QVector>
+#include <QtCore/QSet>
 
 #define DECLARE_MODEL_NODE(k) \
     enum { __node_kind = Kind_##k }; \
@@ -132,9 +133,6 @@ struct TypeInfo
   bool isConstant() const { return m_flags.m_constant; }
   void setConstant(bool is) { m_flags.m_constant = is; }
 
-  bool isConstexpr() const { return m_flags.m_constexpr; }
-  void setConstexpr(bool is) { m_flags.m_constexpr = is; }
-
   bool isVolatile() const { return m_flags.m_volatile; }
   void setVolatile(bool is) { m_flags.m_volatile = is; }
 
@@ -165,7 +163,7 @@ struct TypeInfo
 
   // ### arrays and templates??
 
-  QString toString() const;
+  QString toString(bool parsable = false) const;
 
   static TypeInfo combine (const TypeInfo &__lhs, const TypeInfo &__rhs);
   static TypeInfo resolveType (TypeInfo const &__type, CodeModelItem __scope);
@@ -310,8 +308,8 @@ public:
   TypeAliasModelItem findTypeAlias(const QString &name) const;
   VariableModelItem findVariable(const QString &name) const;
 
-  void addEnumsDeclaration(const QString &enumsDeclaration);
-  QStringList enumsDeclarations() const { return _M_enumsDeclarations; }
+  void addQEnumDeclaration(const QString &qEnumDeclaration);
+  QSet<QString> qEnumDeclarations() const { return _M_qEnumDeclarations; }
 
   inline QHash<QString, ClassModelItem> classMap() const { return _M_classes; }
   inline QHash<QString, EnumModelItem> enumMap() const { return _M_enums; }
@@ -338,7 +336,7 @@ private:
   _ScopeModelItem(const _ScopeModelItem &other);
   void operator = (const _ScopeModelItem &other);
 
-  QStringList _M_enumsDeclarations;
+  QSet<QString> _M_qEnumDeclarations;
 };
 
 class _ClassModelItem: public _ScopeModelItem
@@ -357,6 +355,7 @@ public:
 
   TemplateParameterList templateParameters() const;
   void setTemplateParameters(const TemplateParameterList &templateParameters);
+  bool isTemplateClass() const { return _M_templateParameters.size(); }
 
   bool extendsClass(const QString &name) const;
 
@@ -678,6 +677,9 @@ public:
   CodeModel::AccessPolicy accessPolicy() const;
   void setAccessPolicy(CodeModel::AccessPolicy accessPolicy);
 
+  bool isEnumClass() const { return _M_isEnumClass; }
+  void setEnumClass(bool isEnumClass) { _M_isEnumClass = isEnumClass; }
+
   EnumeratorList enumerators() const;
   void addEnumerator(EnumeratorModelItem item);
   void removeEnumerator(EnumeratorModelItem item);
@@ -691,6 +693,7 @@ protected:
 private:
   CodeModel::AccessPolicy _M_accessPolicy;
   EnumeratorList _M_enumerators;
+  bool _M_isEnumClass{};
 
 private:
   _EnumModelItem(const _EnumModelItem &other);
