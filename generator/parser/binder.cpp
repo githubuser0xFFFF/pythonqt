@@ -365,6 +365,15 @@ void Binder::visitFunctionDefinition(FunctionDefinitionAST *node)
   Q_ASSERT(node->init_declarator != 0);
 
   ScopeModelItem scope = currentScope();
+  bool friendWithDefinition = false;
+
+  if (hasFriendSpecifier(node->storage_specifiers) && ast_cast<FunctionDefinitionAST*>(node))
+    {
+      // check if this function declaration is a "friend" function with implementation body.
+      // In this case we modify the scope, and remove the "friend" flag later on.
+      friendWithDefinition = true;
+      scope = model_static_cast<ScopeModelItem>(_M_current_file);
+    }
 
   InitDeclaratorAST *init_declarator = node->init_declarator;
   DeclaratorAST *declarator = init_declarator->declarator;
@@ -384,6 +393,13 @@ void Binder::visitFunctionDefinition(FunctionDefinitionAST *node)
   }
   CodeModelFinder finder(model(), this);
 
+  if (declarator->valueRef == DeclaratorAST::Rvalue)
+  {
+    // rvalue reference methods are ignored, since we can't use them for the wrappers
+    // (there is usually also a method with lvalue reference binding)
+    return;
+  }
+
   ScopeModelItem functionScope = finder.resolveScope(declarator->id, scope);
   if (! functionScope)
     {
@@ -401,6 +417,12 @@ void Binder::visitFunctionDefinition(FunctionDefinitionAST *node)
     if (p.type.isRvalueReference()) {
       //warnHere();
       //std::cerr << "** Skipping function with rvalue reference parameter: "
+      //          << qPrintable(name_cc.name()) << std::endl;
+      return;
+    }
+    if (p.packedParameter) {
+      //warnHere();
+      //std::cerr << "** Skipping function with packed parameter: "
       //          << qPrintable(name_cc.name()) << std::endl;
       return;
     }
@@ -437,11 +459,30 @@ void Binder::visitFunctionDefinition(FunctionDefinitionAST *node)
     model_static_cast<FunctionModelItem>(_M_current_function)->setVirtual(true);
   }
 
+  if (friendWithDefinition)
+  {
+    // unset the friend flag, as we treat this like a stand-alone function definition
+    _M_current_function->setFriend(false);
+    // also set the access policy to public, just in case
+    _M_current_function->setAccessPolicy(CodeModel::Public);
+  }
   _M_current_function->setVariadics (decl_cc.isVariadics ());
 
   foreach (DeclaratorCompiler::Parameter p, decl_cc.parameters())
     {
       ArgumentModelItem arg = model()->create<ArgumentModelItem>();
+      
+      if (_M_current_class && _M_current_class->isTemplateClass())
+        {
+          QStringList qualifiedName = p.type.qualifiedName();
+          if (qualifiedName.size() == 1 && !qualifiedName.last().contains('<') &&
+              qualifiedName.last() == _M_current_class->name().split('<').first())
+            {
+              // Fix: add template arguments if the argument type is the current class
+              // name without template arguments
+              p.type.setQualifiedName(QStringList(_M_current_class->name()));
+            }
+        }
       arg->setType(qualifyType(p.type, functionScope->qualifiedName()));
       arg->setName(p.name);
       arg->setDefaultValue(p.defaultValue);
@@ -767,6 +808,7 @@ void Binder::visitEnumSpecifier(EnumSpecifierAST *node)
 
   _M_current_enum = model()->create<EnumModelItem>();
   _M_current_enum->setAccessPolicy(_M_current_access);
+  _M_current_enum->setEnumClass(node->is_enum_class);
   updateItemPosition (_M_current_enum->toItem(), node);
   _M_current_enum->setName(name);
   _M_current_enum->setScope(enumScope->qualifiedName());
@@ -827,7 +869,7 @@ void Binder::visitQEnums(QEnumsAST *node)
     //if (node->isQEnum) {
     //  std::cout << enum_list.at(i).toLatin1().constData() << std::endl;
     //}
-    scope->addEnumsDeclaration(enum_list.at(i));
+    scope->addQEnumDeclaration(enum_list.at(i));
   }
 }
 
@@ -848,6 +890,24 @@ void Binder::warnHere() const
     _M_lastWarnedFile = fileName;
     std::cerr << "In file " << fileName.toLatin1().constData() << ":" << std::endl;
   }
+}
+
+bool Binder::hasFriendSpecifier(const ListNode<std::size_t>* it)
+{
+  if (it == 0)
+    return false;
+
+  it = it->toFront();
+  const ListNode<std::size_t>* end = it;
+
+  do
+  {
+    if (decode_token(it->element) == Token_friend) {
+      return true;
+    }
+    it = it->next;
+  } while (it != end);
+  return false;
 }
 
 void Binder::applyStorageSpecifiers(const ListNode<std::size_t> *it, MemberModelItem item)
@@ -902,6 +962,10 @@ void Binder::applyFunctionSpecifiers(const ListNode<std::size_t> *it, FunctionMo
       switch (decode_token(it->element))
         {
           default:
+            break;
+
+          case Token_constexpr:
+            item->setConstexpr(true);
             break;
 
           case Token_inline:

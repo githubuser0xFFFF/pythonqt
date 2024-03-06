@@ -82,9 +82,7 @@ public:
 
     bool build();
 
-    void figureOutEnumValuesForClass(AbstractMetaClass *meta_class, QSet<AbstractMetaClass *> *classes);
-    int figureOutEnumValue(const QString &name, int value, AbstractMetaEnum *meta_enum, AbstractMetaFunction *meta_function = 0);
-    void figureOutEnumValues();
+    void autoAddQEnumsForClassItem(ClassModelItem item);
 
     void addAbstractMetaClass(AbstractMetaClass *cls);
     AbstractMetaClass *traverseTypeAlias(TypeAliasModelItem item);
@@ -92,12 +90,16 @@ public:
     bool setupInheritance(AbstractMetaClass *meta_class);
     AbstractMetaClass *traverseNamespace(NamespaceModelItem item);
     AbstractMetaEnum *traverseEnum(EnumModelItem item, AbstractMetaClass *enclosing, const QSet<QString> &enumsDeclarations);
-    void traverseEnums(ScopeModelItem item, AbstractMetaClass *parent, const QStringList &enumsDeclarations);
+    void traverseEnums(ScopeModelItem item, AbstractMetaClass *parent, const QSet<QString> &enumsDeclarations);
     void traverseFunctions(ScopeModelItem item, AbstractMetaClass *parent);
     void traverseFields(ScopeModelItem item, AbstractMetaClass *parent);
     void traverseStreamOperator(FunctionModelItem function_item);
     void traverseCompareOperator(FunctionModelItem item);
     void traverseBinaryArithmeticOperator(FunctionModelItem item);
+    
+    //! remove functions/methods that are overloads with equivalent parameter types
+    //! when called from Python
+    void removeEquivalentFunctions(AbstractMetaClass* parent);
 
     AbstractMetaFunction *traverseFunction(FunctionModelItem function);
     AbstractMetaField *traverseField(VariableModelItem field, const AbstractMetaClass *cls);
@@ -146,6 +148,8 @@ protected:
 
 private:
     void sortLists();
+
+    AbstractMetaClass* getGlobalNamespace(const TypeEntry* typeEntry);
 
     QString m_file_name;
 

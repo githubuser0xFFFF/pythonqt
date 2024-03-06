@@ -237,6 +237,13 @@ public:
   //! _typeSlots with Type_RichCompare. The result is cached internally.
   bool supportsRichCompare();
 
+  //! Sometimes enum values use a reserved name in Python. In this case
+  //! replace it with something that is not reserved
+  static QByteArray escapeReservedNames(const QByteArray& name);
+
+  //! Add a wrapper that contains global enums
+  static void addGlobalNamespaceWrapper(PythonQtClassInfo* namespaceWrapper);
+
 private:
   void updateRefCountingCBs();
 
@@ -300,6 +307,9 @@ private:
   bool _searchPolymorphicHandlerOnParent;
   bool _searchRefCountCB;
 
+  static QList<PythonQtClassInfo*>     _globalNamespaceWrappers;
+
+  static QSet<QByteArray>              _reservedNames;
 };
 
 //---------------------------------------------------------------

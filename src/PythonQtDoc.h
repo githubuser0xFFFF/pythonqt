@@ -112,12 +112,13 @@ Qt framework</a>.
   - QtCore
   - QtGui
   - QtNetwork
-  - QtOpenGL
+  - QtOpenGL (before Qt6)
   - QtSql
   - QtSvg
-  - QtWebKit
+  - QtWebEngineWidgets
+  - QtWebKit (when available)
   - QtXml
-  - QtXmlPatterns
+  - QtXmlPatterns (before Qt6)
   - QtMultimedia
   - QtQml
   - QtQuick
@@ -129,10 +130,11 @@ Qt framework</a>.
  \section Supported Supported Versions
 
  PythonQt supports:
- - Python 2 (>= Python 2.6)
- - Python 3 (>= Python 3.3)
- - Qt 4.x (Qt 4.7 and Qt 4.8 recommended)
- - Qt 5.x (Tested with Qt 5.0, 5.3, 5.4, 5.6 and 5.11)
+ - Python 2 (>= Python 2.7)
+ - Python 3 (>= Python 3.6)
+ - Qt 4.x (Qt 4.7 and Qt 4.8 recommended) (not in the master branch, see below)
+ - Qt 5.x (Tested with Qt 5.0, 5.3, 5.4, 5.6, 5.11, 5.12 and 5.15)
+ - Qt 6.x (Tested with Qt 6.5 and 6.6) - support may not be complete, support for optional modules may be added as needed
 
  The last working Qt4 version is available at svn branches/Qt4LastWorkingVersion or you can download the PythonQt 3.0 release.
  The current git master branch no longer supports Qt4, since we started to make use of some Qt5-only features.
@@ -196,13 +198,13 @@ Qt framework</a>.
   <tr><td>char/uchar,int/uint,short,ushort,QChar</td><td>integer</td></tr>
   <tr><td>long</td><td>integer</td></tr>
   <tr><td>ulong,longlong,ulonglong</td><td>long</td></tr>
-  <tr><td>QString</td><td>unicode string</td></tr>
-  <tr><td>QByteArray</td><td>QByteArray wrapper <sup>\ref qbytearray-bytes "(1)"</sup></td></tr>
+  <tr><td>QString <sup>\ref qstring "(1)"</sup></td><td>unicode string</td></tr>
+  <tr><td>QByteArray <sup>\ref qbytearray "(2)"</sup></td><td>QByteArray wrapper <sup>\ref qbytearray-bytes "(3)"</sup></td></tr>
   <tr><td>char*</td><td>str</td></tr>
   <tr><td>QStringList</td><td>tuple of unicode strings</td></tr>
   <tr><td>QVariantList</td><td>tuple of objects</td></tr>
   <tr><td>QVariantMap</td><td>dict of objects</td></tr>
-  <tr><td>QVariant</td><td>depends on type <sup>\ref qvariant "(2)"</sup></td></tr>
+  <tr><td>QVariant</td><td>depends on type <sup>\ref qvariant "(4)"</sup></td></tr>
   <tr><td>QSize, QRect and all other standard Qt QVariants</td><td>variant wrapper that supports complete API of the respective Qt classes</td></tr>
   <tr><td>OwnRegisteredMetaType</td><td>C++ wrapper, optionally with additional information/wrapping provided by registerCPPClass()</td></tr>
   <tr><td>QList<AnyObject*></td><td>converts to a list of CPP wrappers</td></tr>
@@ -210,9 +212,11 @@ Qt framework</a>.
   <tr><td>EnumType</td><td>Enum wrapper derived from python integer</td></tr>
   <tr><td>QObject (and derived classes)</td><td>QObject wrapper</td></tr>
   <tr><td>C++ object</td><td>CPP wrapper, either wrapped via PythonQtCppWrapperFactory or just decorated with decorators</td></tr>
-  <tr><td>PyObject</td><td>PyObject <sup>\ref pyobject "(3)"</sup></td></tr>
+  <tr><td>PyObject</td><td>PyObject <sup>\ref pyobject "(5)"</sup></td></tr>
   </table>
 
+  -# \anchor qstring QStringRef (Qt5), QStringView and QAnyStringView (Qt6) are handled like QString.
+  -# \anchor qbytearray QByteArrayView (Qt6) is handled like QByteArray.
   -# \anchor qbytearray-bytes The Python 'bytes' type will automatically be converted to QByteArray where required. For converting a QByteArray to 'bytes' use the .data() method.
   -# \anchor qvariant QVariants are mapped recursively as given above, e.g. a dictionary can
   contain lists of dictionaries of doubles.
@@ -265,6 +269,27 @@ Qt framework</a>.
 
  \endcode
 
+ And this example shows how you can define your own signals and slots:
+
+ \code
+ class MySender(QtCore.QObject):
+   
+   emitProgress = QtCore.Signal(float)  # this is actually a double argument in C++
+   
+ class MyReceiver(QtCore.QObject):
+   
+   @QtCore.Slot(float)
+   def progress(self, value):
+     print(f"progress: {value}")
+
+ sender = MySender()
+ receiver = MyReceiver()
+ # connecting with the effective signature:
+ sender.connect("emitProgress(double)", receiver, "progress(double)")
+ sender.emitProgress(2.0)
+
+ \endcode
+
 \section CPP CPP Wrapping
 
 You can create dedicated wrapper QObjects for any C++ class. This is done by deriving from PythonQtCppWrapperFactory
@@ -304,6 +329,8 @@ QtCore.QDate.currentDate()
 
 # enum value
 QtCore.QFont.UltraCondensed
+# or, alternatively
+QtCore.QFont.Stretch.UltraCondensed
 
 \endcode
 
@@ -450,11 +477,11 @@ yourCpp = None
 
  \page Building Building
 
- PythonQt requires at least Qt 4.6.1 (for earlier Qt versions, you will need to run the pythonqt_generator, Qt 4.3 is the absolute minimum) and Python 2.6.x/2.7.x or Python 3.3 (or higher).
+ PythonQt requires at least Qt 5.0 and Python 2.7.x or Python 3.6 (or higher).
  To compile PythonQt, you will need a python developer installation which includes Python's header files and
 the python2x.[lib | dll | so | dynlib].
  The recommended way to build PythonQt is to use the QMake-based *.pro file.
- The build scripts a currently set to use Python 2.6.
+ The build scripts are currently set to use Python 3.10 by default.
  You may need to tweak the \b build/python.prf file to set the correct Python includes and libs on your system.
 
  \subsection Windows
@@ -465,21 +492,20 @@ the python2x.[lib | dll | so | dynlib].
  Python yourself, using your compiler.
 
  To build PythonQt, you need to set the environment variable \b PYTHON_PATH to point to the root
- dir of the python installation and \b PYTHON_LIB to point to
- the directory where the python lib file is located.
+ dir of the python installation and \b PYTHON_VERSION should state the used Python version.
 
  When using the prebuild Python installer, this will be:
 
  \code
- > set PYTHON_PATH = c:\Python26
- > set PYTHON_LIB  = c:\Python26\libs
+ > set PYTHON_PATH = c:\Python310
+ > set PYTHON_VERSION = 3.10
  \endcode
 
  When using the python sources, this will be something like:
 
  \code
-  > set PYTHON_PATH = c:\yourDir\Python-2.6.1\
-  > set PYTHON_LIB  = c:\yourDir\Python-2.6.1\PCbuild8\Win32
+ > set PYTHON_PATH = c:\yourDir\Python-3.10.12\
+ > set PYTHON_VERSION = 3.10
  \endcode
 
  To build all, do the following (after setting the above variables):
@@ -519,7 +545,7 @@ the python2x.[lib | dll | so | dynlib].
  You should add PythonQt/lib to your LD_LIBRARY_PATH so that the runtime
  linker can find the *.so files.
 
- \subsection MacOsX
+ \subsection MacOS
 
  On Mac, Python is installed as a Framework, so you should not need to install it.
  To build PythonQt, just do a:

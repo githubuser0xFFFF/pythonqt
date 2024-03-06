@@ -142,7 +142,6 @@ TypeInfo TypeInfo::combine (const TypeInfo &__lhs, const TypeInfo &__rhs)
   TypeInfo __result = __lhs;
 
   __result.setConstant (__result.isConstant () || __rhs.isConstant ());
-  __result.setConstexpr (__result.isConstexpr () || __rhs.isConstexpr ());
   __result.setVolatile (__result.isVolatile () || __rhs.isVolatile ());
   __result.setMutable (__result.isMutable () || __rhs.isMutable ());
   __result.setReference (__result.isReference () || __rhs.isReference ());
@@ -176,7 +175,7 @@ TypeInfo TypeInfo::resolveType (TypeInfo const &__type, CodeModelItem __scope)
     return otherType;
 }
 
-QString TypeInfo::toString() const
+QString TypeInfo::toString(bool parsable) const
 {
   QString tmp;
 
@@ -184,14 +183,13 @@ QString TypeInfo::toString() const
   if (isConstant())
     tmp += QLatin1String(" const");
 
-  if (isConstexpr())
-    tmp += QLatin1String(" constexpr");
+  if (!parsable) {
+    if (isVolatile())
+      tmp += QLatin1String(" volatile");
 
-  if (isVolatile())
-    tmp += QLatin1String(" volatile");
-
-  if (isMutable())
-    tmp += QLatin1String(" mutable");
+    if (isMutable())
+      tmp += QLatin1String(" mutable");
+  }
 
   if (indirections())
     tmp += QString(indirections(), QLatin1Char('*'));
@@ -209,7 +207,7 @@ QString TypeInfo::toString() const
           if (i != 0)
             tmp += QLatin1String(", ");
 
-          tmp += m_arguments.at(i).toString();
+          tmp += m_arguments.at(i).toString(parsable);
         }
       tmp += QLatin1String(")");
     }
@@ -431,9 +429,9 @@ FunctionList _ScopeModelItem::functions() const
   return _M_functions.values();
 }
 
-void _ScopeModelItem::addEnumsDeclaration(const QString &enumsDeclaration)
+void _ScopeModelItem::addQEnumDeclaration(const QString &qEnumDeclaration)
 {
-    _M_enumsDeclarations << enumsDeclaration;
+  _M_qEnumDeclarations.insert(qEnumDeclaration);
 }
 
 FunctionDefinitionList _ScopeModelItem::functionDefinitions() const

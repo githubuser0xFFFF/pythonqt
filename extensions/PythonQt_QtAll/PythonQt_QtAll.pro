@@ -11,13 +11,17 @@ isEmpty( PYTHONQTALL_CONFIG ) {
   qtHaveModule(svg):CONFIG += PythonQtSvg
   qtHaveModule(sql):CONFIG += PythonQtSql
   qtHaveModule(network):CONFIG += PythonQtNetwork
-  qtHaveModule(opengl):CONFIG += PythonQtOpengl
+  lessThan(QT_MAJOR_VERSION, 6) {
+    # module is empty in Qt6
+    qtHaveModule(opengl):CONFIG += PythonQtOpengl
+  }
   qtHaveModule(xml):CONFIG += PythonQtXml
   qtHaveModule(xmlpatterns):CONFIG += PythonQtXmlpatterns
   qtHaveModule(multimedia):CONFIG += PythonQtMultimedia
   qtHaveModule(qml):CONFIG += PythonQtQml
   qtHaveModule(quick):CONFIG += PythonQtQuick
   qtHaveModule(uitools):CONFIG += PythonQtUiTools
+  qtHaveModule(webenginewidgets):CONFIG += PythonQtWebEngineWidgets
 
   qtHaveModule(webkit):CONFIG += PythonQtWebKit
 } else {
@@ -26,7 +30,7 @@ isEmpty( PYTHONQTALL_CONFIG ) {
   CONFIG += $${PYTHONQTALL_CONFIG}
 }
 
-TARGET   = PythonQt_QtAll-Qt5-PythonXY
+TARGET   = PythonQt_QtAll-Qt$${QT_MAJOR_VERSION}-PythonXY
 TEMPLATE = lib
 
 DESTDIR    = ../../lib
@@ -35,7 +39,7 @@ include ( ../../build/common.prf )
 include ( ../../build/PythonQt.prf )  
 TARGET = $$replace(TARGET, PythonXY, Python$${PYTHON_VERSION})
 
-CONFIG += qt strict_c++
+CONFIG += qt strict_c++ msvc_mp
 
 !static:!staticlib {
   CONFIG += dll
@@ -93,6 +97,7 @@ PythonQtSvg {
   DEFINES += PYTHONQT_WITH_SVG
   Xinclude (com_trolltech_qt_svg)
   QT += svg
+  !lessThan(QT_MAJOR_VERSION,6): QT += svgwidgets
 }
 
 PythonQtSql {
@@ -111,6 +116,12 @@ PythonQtOpengl {
   DEFINES += PYTHONQT_WITH_OPENGL
   QT += opengl
   PythonQtCore: Xinclude (com_trolltech_qt_opengl)
+  QT += xml
+}
+
+PythonQtXml {
+  DEFINES += PYTHONQT_WITH_XML
+  Xinclude (com_trolltech_qt_xml)
   QT += xml
 }
 
@@ -142,6 +153,12 @@ PythonQtUiTools {
   DEFINES += PYTHONQT_WITH_UITOOLS
   Xinclude (com_trolltech_qt_uitools)
   QT += uitools
+}
+
+PythonQtWebEngineWidgets {
+  DEFINES += PYTHONQT_WITH_WEBENGINEWIDGETS
+  Xinclude (com_trolltech_qt_webenginewidgets)
+  QT += webenginewidgets
 }
 
 PythonQtWebKit {

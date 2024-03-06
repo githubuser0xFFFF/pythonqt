@@ -45,7 +45,7 @@ jobs:
         apt-get clean
       
     - name: Checkout PythonQt
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Build PythonQt
       run: |
@@ -57,7 +57,7 @@ jobs:
         CONFIG+=sanitizer CONFIG+=sanitize_undefined CONFIG+=sanitize_address \
         PYTHON_VERSION=$(python3 --version | cut -d " " -f 2 | cut -d "." -f1,2) \
         PYTHON_DIR=$(which python3 | xargs dirname | xargs dirname)
-        make -j 2
+        make -j $(nproc)
         UBSAN_OPTIONS="halt_on_error=1" ASAN_OPTIONS="detect_leaks=0:detect_stack_use_after_return=1:fast_unwind_on_malloc=0" \
           make check TESTARGS="-platform offscreen"
       
@@ -71,7 +71,7 @@ jobs:
         ./pythonqt_generator
 
     - name: Upload Wrappers
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: wrappers_ubuntu_${{ matrix.container_version }}
         path: generated_cpp
@@ -117,10 +117,14 @@ jobs:
         which python 2>/dev/null && export PYTHON_VERSION_SUFFIX= || export PYTHON_VERSION_SUFFIX=3
         uname -a; gcc --version | grep "gcc"; python${PYTHON_VERSION_SUFFIX} --version; qmake-qt5 --version
         echo ============================
+        export PYTHON_VERSION_SHORT=`python${PYTHON_VERSION_SUFFIX} --version | cut -d " " -f 2 | cut -d "." -f1,2`
+        if [[ `echo ${PYTHON_VERSION_SHORT} | wc -w` = 0 ]]; then export PYTHON_VERSION_SHORT=2.7; fi
+        export PYTHON_DIR=`which python${PYTHON_VERSION_SUFFIX} | xargs dirname | xargs dirname`
+        echo PYTHON_VERSION_SHORT=${PYTHON_VERSION_SHORT}
+        echo PYTHON_DIR=${PYTHON_DIR}
         qmake-qt5 -r PythonQt.pro CONFIG+=${{ matrix.configuration }} \
-          PYTHON_VERSION=$(python${PYTHON_VERSION_SUFFIX} --version | cut -d " " -f 2 | cut -d "." -f1,2) \
-          PYTHON_DIR=$(which python${PYTHON_VERSION_SUFFIX} | xargs dirname | xargs dirname)
-        make -j 2 && make check TESTARGS="-platform offscreen"
+          "PYTHON_VERSION=${PYTHON_VERSION_SHORT}" "PYTHON_DIR=${PYTHON_DIR}"
+        make -j $(nproc) && make check TESTARGS="-platform offscreen"
 
     - name: Generate Wrappers
       run: |
@@ -163,12 +167,12 @@ jobs:
         archives: 'qtmultimedia qtmacextras qtbase qttools'
 
     - name: Setup Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '${{ matrix.python-version }}'
 
     - name: Checkout PythonQt
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Detect exact versions
       id : versions
@@ -203,7 +207,7 @@ jobs:
           PYTHON_DIR="$pythonLocation" \
           PKGCONFIG+=$PYTHON_PKGCONFIG_NAME \
           -r PythonQt.pro
-        make -j 2
+        make -j $(nproc)
         UBSAN_OPTIONS="halt_on_error=1" ASAN_OPTIONS="detect_leaks=0:detect_stack_use_after_return=1:fast_unwind_on_malloc=0" \
           make check TESTARGS="-platform offscreen"
 
@@ -213,10 +217,10 @@ jobs:
         cd generator
         # workaround to allow to find the Qt include dirs for installed standard qt packages
         UBSAN_OPTIONS="halt_on_error=1" ASAN_OPTIONS="detect_leaks=0:detect_stack_use_after_return=1:fast_unwind_on_malloc=0" \
-        QTDIR=-UNDEFINED- ./pythonqt_generator --include-paths=$Qt5_Dir/lib
+        QTDIR=-UNDEFINED- ./pythonqt_generator --qt-version=${{ steps.versions.outputs.QT_VERSION_FULL }} --include-paths=$Qt5_Dir/lib
 
     - name: Upload Wrappers
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: wrappers_macos${{ steps.versions.outputs.MACOS_VERSION_SHORT }}_qt${{ steps.versions.outputs.QT_VERSION_SHORT }}
         path: generated_cpp
@@ -255,10 +259,10 @@ jobs:
     steps:
 
     - name: Checkout PythonQt
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Reset PATH
-      uses: egor-tensin/cleanup-path@v3
+      uses: egor-tensin/cleanup-path@v4
 
     - name: Install MSVC++
       uses: ilammy/msvc-dev-cmd@v1
@@ -326,7 +330,7 @@ jobs:
         pythonqt_generator
 
     - name: Upload Wrappers
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: wrappers_${{ matrix.qt-arch }}_${{ steps.versions.outputs.QT_VERSION_SHORT }}
         path: generated_cpp

@@ -368,8 +368,6 @@ QString AbstractMetaFunction::signature() const
 
     if (isConstant())
         s += " const";
-    if (isConstexpr())
-        s += " constexpr";
 
     return s;
 }
@@ -661,8 +659,6 @@ QString AbstractMetaFunction::minimalSignature() const
     minimalSignature += ")";
     if (isConstant())
         minimalSignature += "const";
-    if (isConstexpr())
-        minimalSignature += "constexpr";
 
     minimalSignature = TypeSystem::normalizedSignature(minimalSignature.toLocal8Bit().constData());
     m_cached_minimal_signature = minimalSignature;
@@ -1105,6 +1101,11 @@ void AbstractMetaClass::addFunction(AbstractMetaFunction *function)
     m_has_virtual_slots |= function->isVirtualSlot();
     m_has_virtuals |= !function->isFinal() || function->isVirtualSlot();
     m_has_nonpublic |= !function->isPublic();
+}
+
+void AbstractMetaClass::removeFunction(AbstractMetaFunction* function)
+{
+  m_functions.removeOne(function);
 }
 
 bool AbstractMetaClass::hasSignal(const AbstractMetaFunction *other) const

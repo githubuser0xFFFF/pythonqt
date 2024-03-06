@@ -93,6 +93,12 @@
 
 // don't need this:
 #define Q_REVISION(v)
+#define Q_DECLARE_OPERATORS_FOR_FLAGS(x)
+
+#include <QtCore/QMetaType>
+
+// parse still stumbles over this declaration
+#define QT_DECL_METATYPE_EXTERN_TAGGED(TYPE, TAG, EXPORT)
 
 #include <QtCore/QtCore>
 #include <QtGui/QtGui>
@@ -100,6 +106,10 @@
 #include <QtSql/QtSql>
 #include <QtSvg/QtSvg>
 #include <QtXml/QtXml>
+
+#if QT_VERSION >= 0x060000
+#include <QtSvgWidgets/QtSvgWidgets>
+#endif
 
 #include <QtUiTools/QtUiTools>
 
@@ -117,8 +127,10 @@
 #include <QtQuickWidgets/QtQuickWidgets>
 #endif
 
+#if QT_VERSION < 0x060000
 #ifndef QT_NO_XMLPATTERNS
 #  include <QtXmlPatterns/QtXmlPatterns>
+#endif
 #endif
 
 #ifndef QT_NO_WEBKIT
@@ -1222,4 +1234,8 @@
 #define GL_LOGIC_OP GL_INDEX_LOGIC_OP
 #define GL_TEXTURE_COMPONENTS GL_TEXTURE_INTERNAL_FORMAT
 #include <QtOpenGL/QtOpenGL>
+#if QT_VERSION >= 0x060000
+#include <QtOpenGLWidgets/QtOpenGLWidgets>
+#endif
+
 #endif // QT_NO_OPENGL

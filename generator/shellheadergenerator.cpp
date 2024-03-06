@@ -100,10 +100,12 @@ static bool field_lessThan(const AbstractMetaField* a, const AbstractMetaField* 
 
 void ShellHeaderGenerator::write(QTextStream& s, const AbstractMetaClass* meta_class)
 {
+  setCurrentScope(meta_class);
   QString builtIn = ShellGenerator::isBuiltIn(meta_class->name()) ? "_builtin" : "";
-  QString pro_file_name = meta_class->package().replace(".", "_") + builtIn + "/" + meta_class->package().replace(".", "_") + builtIn + ".pri";
+  QString fileBaseName = toFileNameBase(meta_class->package() + builtIn);
+  QString pro_file_name = fileBaseName + "/" + fileBaseName + ".pri";
   priGenerator->addHeader(pro_file_name, fileNameForClass(meta_class));
-  setupGenerator->addClass(meta_class->package().replace(".", "_") + builtIn, meta_class);
+  setupGenerator->addClass(meta_class->package() + builtIn, meta_class);
 
   QString include_block = "PYTHONQTWRAPPER_" + meta_class->name().toUpper() + "_H";
 
@@ -221,6 +223,11 @@ void ShellHeaderGenerator::write(QTextStream& s, const AbstractMetaClass* meta_c
           // always do a direct call, since we want to call the real virtual function here
           s << "this->";
         }
+        if (fun->originalName() == "operator=") {
+          // make it clear we don't want to call the (automatically generated)
+          // assignment operator of the promoter
+          s << meta_class->qualifiedCppName() << "::";
+        }
         s << fun->originalName() << "(";
         writePromoterArgs(args, s);
         s << "); }" << endl;
@@ -302,14 +309,26 @@ void ShellHeaderGenerator::write(QTextStream& s, const AbstractMetaClass* meta_c
     }
 
     for (AbstractMetaEnum * enum1 :  enums) {
-      s << "enum " << enum1->name() << "{" << endl;
+      bool isEnumClass = enum1->typeEntry()->isEnumClass();
+      s << "enum " << (isEnumClass ? "class " : "") << enum1->name() << "{" << endl;
       bool first = true;
-      QString scope = enum1->wasProtected() ? promoterClassName(meta_class) : meta_class->qualifiedCppName();
+      QString scope = meta_class->isGlobalNamespace() ? QString() :
+          (enum1->wasProtected() ? promoterClassName(meta_class) : meta_class->qualifiedCppName());
+      if (isEnumClass) {
+        scope += "::" + enum1->name();
+      }
 
       for (AbstractMetaEnumValue * value :  enum1->values()) {
         if (first) { first = false; }
         else { s << ", "; }
-        s << "  " << value->name() << " = " << scope << "::" << value->name();
+        QString assignedValue = scope + "::" + value->name();
+        if (isEnumClass) {
+          s << "  " << value->name() << " = " << "static_cast<int>(" << scope << "::" << value->name() << ")";
+        }
+        else {
+          s << "  " << value->name() << " = " << scope << "::" << value->name();
+
+        }
       }
       s << "};" << endl;
     }
@@ -347,7 +366,8 @@ void ShellHeaderGenerator::write(QTextStream& s, const AbstractMetaClass* meta_c
     }
 
     if (meta_class->typeEntry()->isValue()
-      && !copyConstructorSeen && defaultConstructorSeen) {
+      && !copyConstructorSeen && defaultConstructorSeen && !meta_class->typeEntry()->hasNoCopy())
+    {
       QString className = meta_class->generateShellClass() ? shellClassName(meta_class) : meta_class->qualifiedCppName();
       s << meta_class->qualifiedCppName() << "* new_" << meta_class->name() << "(const " << meta_class->qualifiedCppName() << "& other) {" << endl;
       s << className << "* a = new " << className << "();" << endl;
@@ -431,7 +451,7 @@ void ShellHeaderGenerator::write(QTextStream& s, const AbstractMetaClass* meta_c
 
   s << "#endif // " << include_block << endl;
 
-
+  setCurrentScope(nullptr);
 }
 
 void ShellHeaderGenerator::writePromoterArgs(AbstractMetaArgumentList& args, QTextStream& s)

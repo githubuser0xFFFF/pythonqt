@@ -372,10 +372,9 @@ struct DeclarationStatementAST: public StatementAST
 struct DeclaratorAST: public AST
 {
   DECLARE_AST_NODE(Declarator)
+  enum ValueReferenceEnum { UnspecifiedRef, Lvalue, Rvalue }; // "&" or "&&" after member function
   
-  DeclaratorAST() {
-    _override = false;
-  }
+  DeclaratorAST() = default;
   const ListNode<PtrOperatorAST*> *ptr_ops{};
   DeclaratorAST *sub_declarator{};
   NameAST *id{};
@@ -385,6 +384,8 @@ struct DeclaratorAST: public AST
   const ListNode<std::size_t> *fun_cv{};
   ExceptionSpecificationAST *exception_spec{};
   bool _override{};
+  bool packedParameter{};
+  ValueReferenceEnum valueRef{ UnspecifiedRef };
 };
 
 struct DeleteExpressionAST: public ExpressionAST
@@ -420,6 +421,7 @@ struct EnumSpecifierAST: public TypeSpecifierAST
 
   NameAST *name{};
   const ListNode<EnumeratorAST*> *enumerators{};
+  bool is_enum_class{};
 };
 
 struct EnumeratorAST: public AST
@@ -710,6 +712,7 @@ struct SimpleTypeSpecifierAST: public TypeSpecifierAST
   TypeIdAST *type_id{};
   ExpressionAST *expression{};
   NameAST *name{};
+  bool is_auto{};
 };
 
 struct SizeofExpressionAST: public ExpressionAST
@@ -749,6 +752,7 @@ struct TemplateArgumentAST: public AST
 
   TypeIdAST *type_id{};
   ExpressionAST *expression{};
+  bool variadic{};
 };
 
 struct TemplateDeclarationAST: public DeclarationAST
