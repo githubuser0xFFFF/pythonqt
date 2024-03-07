@@ -662,6 +662,15 @@ QByteArray PythonQtSlotInfo::getImplementingClassName() const
   }
 }
 
+void PythonQtSlotInfo::invokeQtMethod(QObject* obj, PythonQtSlotInfo* slot, void** args)
+{
+  if (slot->shouldAllowThreads() && _globalShouldAllowThreads) {
+    PYTHONQT_ALLOW_THREADS_SCOPE
+    obj->qt_metacall(QMetaObject::InvokeMetaMethod, slot->slotIndex(), args);
+  } else {
+    obj->qt_metacall(QMetaObject::InvokeMetaMethod, slot->slotIndex(), args);
+  }
+}
 
 void PythonQtSlotInfo::setGlobalShouldAllowThreads(bool flag)
 {
@@ -670,80 +679,5 @@ void PythonQtSlotInfo::setGlobalShouldAllowThreads(bool flag)
 
 bool PythonQtSlotInfo::getGlobalShouldAllowThreads()
 {
-	return _globalShouldAllowThreads;
-}
-
-
-//! The delegate instance is statically constructed in the UI main thread.
-static PythonQtMetaCallDelegate MetaCallDelegate;
-static std::exception_ptr MetacallException = nullptr;
-
-/**
- * Delegates the meta call to the PythonQtMetaCallDelegate instance to ensure
- * that the slot is called in the main UI thread.
- * The advantage of this method is, that it does rely on private Qt API. The
- * slot is called in the thread of the MetaCallDelegate object  - that means
- * in the main UI thread. This allows a Python interpreter running in a
- * Qt worker thread to call functions of Qt widgets in the main UI thread.
- */
-static void delegateMetaCall(QObject* obj, PythonQtSlotInfo* slot, void** args)
-{
-	MetacallException = nullptr;
-	MetaCallDelegate.metaObject()->invokeMethod(&MetaCallDelegate, "qt_metacall",
-	  Qt::BlockingQueuedConnection,
-	  Q_ARG(QObject*, obj),  Q_ARG(void*, slot), Q_ARG(void*, args));
-
-	if (MetacallException)
-	{
-		std::rethrow_exception(MetacallException);
-	}
-}
-
-
-/**
- * If the current thread is not the main UI thread, then the metacall is
- * delegated to the MetaCallDelegate. This helper object has been created in
- * the main UI thread and will execute the metacall in the main UI thread.
- */
-void PythonQtSlotInfo::invokeQtMethod(QObject* obj, PythonQtSlotInfo* slot, void** args)
-{
-  if (QThread::currentThread() != MetaCallDelegate.thread())
-  {
-	  delegateMetaCall(obj, slot, args);
-  }
-  else
-  {
-	  if (slot->shouldAllowThreads() && _globalShouldAllowThreads) {
-      PYTHONQT_ALLOW_THREADS_SCOPE
-      obj->qt_metacall(QMetaObject::InvokeMetaMethod, slot->slotIndex(), args);
-	  } else {
-      obj->qt_metacall(QMetaObject::InvokeMetaMethod, slot->slotIndex(), args);
-	  }
-  }
-}
-
-/**
- * Calls the slot in the main UI thread
- */
-void PythonQtMetaCallDelegate::qt_metacall(QObject* obj, void* _slot, void* args)
-{
-	PythonQtSlotInfo *slot = (PythonQtSlotInfo*) _slot;
-	try
-	{
-		if (slot->shouldAllowThreads() && PythonQtSlotInfo::getGlobalShouldAllowThreads())
-		{
-			PYTHONQT_ALLOW_THREADS_SCOPE
-			obj->qt_metacall(QMetaObject::InvokeMetaMethod, slot->slotIndex(),
-				(void**)args);
-		}
-		else
-		{
-			obj->qt_metacall(QMetaObject::InvokeMetaMethod, slot->slotIndex(),
-				(void**)args);
-		}
-	}
-	catch (...)
-	{
-		MetacallException = std::current_exception();
-	}
+  return _globalShouldAllowThreads;
 }
