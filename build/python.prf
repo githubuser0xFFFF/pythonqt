@@ -63,7 +63,7 @@ contains(PKGCONFIG, "python.*"){
 
   # check if debug or release
   CONFIG(debug, debug|release) {
-    DEBUG_EXT = 
+    DEBUG_EXT = _d
   } else {
     DEBUG_EXT = 
   }
