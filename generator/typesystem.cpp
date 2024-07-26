@@ -155,8 +155,8 @@ class Handler : public QXmlDefaultHandler
 public:
     Handler(TypeDatabase *database, unsigned int qtVersion, bool generate)
         : m_database(database)
-        , m_qtVersion(qtVersion)
         , m_generate(generate ? TypeEntry::GenerateAll : TypeEntry::GenerateForSubclass)
+        , m_qtVersion(qtVersion)
     {
         m_current_enum = 0;
         current = 0;
@@ -239,24 +239,25 @@ private:
 
 bool Handler::error(const QXmlParseException &e)
 {
-    qWarning("Error: line=%d, column=%d, message=%s\n",
-             e.lineNumber(), e.columnNumber(), qPrintable(e.message()));
+    qWarning() << "Error: line=" << e.lineNumber()
+        << ", column=" << e.columnNumber()
+        << ", message=" << e.message() << "\n";
     return false;
 }
 
 bool Handler::fatalError(const QXmlParseException &e)
 {
-    qWarning("Fatal error: line=%d, column=%d, message=%s\n",
-             e.lineNumber(), e.columnNumber(), qPrintable(e.message()));
-
+    qWarning() << "Fatal error: line=" << e.lineNumber()
+        << ", column=" << e.columnNumber()
+        << ", message=" << e.message() << "\n";
     return false;
 }
 
 bool Handler::warning(const QXmlParseException &e)
 {
-    qWarning("Warning: line=%d, column=%d, message=%s\n",
-             e.lineNumber(), e.columnNumber(), qPrintable(e.message()));
-
+    qWarning() << "Warning: line=" << e.lineNumber()
+        << ", column=" << e.columnNumber()
+        << ", message=" << e.message() << "\n";
     return false;
 }
 
@@ -539,6 +540,7 @@ bool Handler::startElement(const QString &, const QString &n,
 
         QHash<QString, QString> attributes;
         attributes["name"] = QString();
+        attributes["aliases"] = QString();
 
         switch (element->type) {
         case StackElement::PrimitiveTypeEntry:
@@ -585,14 +587,19 @@ bool Handler::startElement(const QString &, const QString &n,
         fetchAttributeValues(tagName, atts, &attributes);
 
         QString name = attributes["name"];
+        QStringList aliases = attributes["aliases"].split(',', Qt::SkipEmptyParts);
 
         // We need to be able to have duplicate primitive type entries, or it's not possible to
         // cover all primitive java types (which we need to do in order to support fake
         // meta objects)
         if (element->type != StackElement::PrimitiveTypeEntry) {
-            TypeEntry *tmp = m_database->findType(name);
-            if (tmp != 0) {
+            if (m_database->findType(name)) {
                 ReportHandler::warning(QString("Duplicate type entry: '%1'").arg(name));
+            }
+            for (const QString& alias : aliases) {
+                if (m_database->findType(alias)) {
+                    ReportHandler::warning(QString("Duplicate alias type entry: '%1'").arg(alias));
+                }
             }
         }
 
@@ -757,6 +764,7 @@ bool Handler::startElement(const QString &, const QString &n,
             Q_ASSERT(false);
         };
 
+        element->entry->setAliases(aliases);  // also add type under given aliases into type database
         if (element->entry)
             m_database->addType(element->entry);
         else
@@ -1737,7 +1745,7 @@ QString ContainerTypeEntry::targetLangName() const
         //     case MultiHashCollectio: return "MultiHash";
     case PairContainer: return "QPair";
     default:
-        qWarning("bad type... %d", m_type);
+        qWarning() << "bad type... " << m_type;
         break;
     }
     return QString();
@@ -1828,6 +1836,14 @@ bool TypeDatabase::isFieldRejected(const QString &class_name, const QString &fie
             (r.class_name == class_name || r.class_name == "*"))
             return true;
     return false;
+}
+
+void TypeDatabase::addType(TypeEntry* e)
+{
+    m_entries[e->qualifiedCppName()].append(e);
+    for (const QString& alias : e->aliases()) {
+        m_entries[alias].append(e);
+    }
 }
 
 FlagsTypeEntry *TypeDatabase::findFlagsType(const QString &name) const
@@ -2147,4 +2163,3 @@ unsigned int TypeSystem::qtVersionFromString(const QString& value, bool& ok)
   }
   return result;
 }
-

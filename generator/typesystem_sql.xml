@@ -7,7 +7,8 @@
   <enum-type name="QSqlDriver::DbmsType"/>
 
   <namespace-type name="QSql">
-     <include file-name="qsql.h" location="global"/>
+     <include file-name="qsql.h" location="global" before-version="6"/>
+     <include file-name="qtsqlglobal.h" location="global" since-version="6"/>
   </namespace-type>
 
   <value-type name="QSqlDatabase">
@@ -114,7 +115,9 @@
       <modify-function signature="virtual_hook(int,void*)">
         <remove/>
       </modify-function>
-
+      <modify-function signature="boundValues(Qt::Disambiguated_t)">
+        <remove/>
+      </modify-function>
   </object-type>
   <object-type name="QSqlTableModel">
     <extra-includes>

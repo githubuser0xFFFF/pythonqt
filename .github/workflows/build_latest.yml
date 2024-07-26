@@ -5,7 +5,7 @@ on:
     branches: 
        - master
   pull_request:
-      
+
 defaults:
   run:
     shell: bash
@@ -16,7 +16,7 @@ jobs:
       fail-fast: false
       matrix:
         os: ['ubuntu', 'windows']
-        qt-version: [ '5.12.*', '5.15.*', '6.5.*' ]
+        qt-version: [ '5.12.*', '5.15.*', '6.7.*' ]
         python-version: [ '3.12' ]
     runs-on: ${{ matrix.os }}-latest
     steps:
@@ -28,12 +28,12 @@ jobs:
         arch: amd64
 
     - name: Install Qt ${{matrix.qt-version}}
-      uses: jurplel/install-qt-action@v3
+      uses: jurplel/install-qt-action@v4
       with:
-        version: ${{ matrix.qt-version }}
+        # 6.7.* currently does not work with ubuntu with this action
+        version: ${{ matrix.os == 'ubuntu' && matrix.qt-version == '6.7.*' && '6.6.*' || matrix.qt-version }}
         modules: ${{startsWith(matrix.qt-version, '6') && 'qt5compat qtscxml qtpositioning qtwebchannel qtmultimedia qtwebengine' || '' }}
         arch: ${{ matrix.os == 'ubuntu' && 'gcc_64' || (startsWith(matrix.qt-version, '5.12') && 'win64_msvc2017_64' || 'win64_msvc2019_64') }}
-        archives: "qtmultimedia qtbase qttools qtdeclarative ${{ matrix.os == 'windows' && 'qtwinextras' || 'qtlinuxextras qtwayland icu' }}"
 
     - name: Setup Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
@@ -50,12 +50,9 @@ jobs:
         echo "QT_VERSION_MAJOR=$QT_VERSION_MAJOR" >> $GITHUB_ENV
         QT_VERSION_SHORT=$(cut -f 1,2 -d . <<< "${{matrix.qt-version}}")
         echo "QT_VERSION_SHORT=$QT_VERSION_SHORT" >> $GITHUB_OUTPUT
-        QTDIR=$(eval echo "\$Qt${QT_VERSION_MAJOR}_DIR")
         PYTHON_VERSION_FULL=$(python --version 2>&1 | cut -f 2 -d ' ')
         PYTHON_VERSION_SHORT=$(cut -f 1,2 -d . <<< $PYTHON_VERSION_FULL)
         echo "PYTHON_VERSION_SHORT=$PYTHON_VERSION_SHORT" >> $GITHUB_OUTPUT
-        echo "QTDIR=$QTDIR" >> $GITHUB_ENV
-        echo "$QTDIR/bin" >> $GITHUB_PATH
         echo "$pythonLocation/bin" >> $GITHUB_PATH
 
     - name: Build generator Ubuntu
@@ -79,7 +76,7 @@ jobs:
       shell: bash
       run: |
         cd generator
-        if [[ ${{ matrix.os }} == 'windows' && ${{ matrix.qt-version }} =~ '5.1' ]]; then export QTDIR=$Qt5_Dir; fi 
+        QTDIR="$QT_ROOT_DIR" \
         UBSAN_OPTIONS="halt_on_error=1" \
         ASAN_OPTIONS="detect_leaks=0:detect_stack_use_after_return=1:fast_unwind_on_malloc=0" \
         ./pythonqt_generator
@@ -101,6 +98,7 @@ jobs:
         PYTHON_VERSION=$(python3 --version | cut -d " " -f 2 | cut -d "." -f1,2) \
         PYTHON_DIR=$(which python3 | xargs dirname | xargs dirname)
         make -j $(nproc)
+        PYTHONDEVMODE=1 PYTHONASYNCIODEBUG=1 PYTHONWARNINGS=error PYTHONMALLOC=malloc_debug \
         UBSAN_OPTIONS="halt_on_error=1" ASAN_OPTIONS="detect_leaks=0:detect_stack_use_after_return=1:fast_unwind_on_malloc=0" \
           make check TESTARGS="-platform offscreen"
           
@@ -115,5 +113,7 @@ jobs:
            "PYTHON_PATH=%pythonLocation%" ^
            "PYTHON_VERSION=${{ steps.setenv.outputs.PYTHON_VERSION_SHORT }}" ^
            PythonQt.pro
+        set PYTHONDEVMODE=1
+        set PYTHONASYNCIODEBUG=1
+        set PYTHONWARNINGS=error
         nmake && nmake check "TESTARGS=-platform offscreen"
-          
