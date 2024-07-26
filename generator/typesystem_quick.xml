@@ -18,6 +18,8 @@
 <rejection class="QQuickImageResponse"/>
 <rejection class="QQuickAsyncImageProvider"/>
 <!-- end -->
+<rejection class="QQuickRhiItem" since-version="6.7"/>  <!-- rest of QRhi API currently not available -->
+<rejection class="QQuickRhiItemRenderer" since-version="6.7"/>  <!-- rest of QRhi API currently not available -->
 
   <object-type name="QQuickAsyncImageProvider"></object-type>
   <object-type name="QQuickFramebufferObject"></object-type>
@@ -57,6 +59,9 @@
 <object-type name="QSGTextureMaterial"></object-type>
 <object-type name="QSGTextureProvider"></object-type>
 <object-type name="QSGTransformNode"></object-type>
+<object-type name="QSGTextNode" create-shell="no" since-version="6.7"/>
+<enum-type name="QSGTextNode::RenderType" since-version="6.7"/>
+<enum-type name="QSGTextNode::TextStyle" since-version="6.7"/>
 
 <object-type name="QSGGeometry::Attribute"></object-type>
 <object-type name="QSGGeometry::AttributeSet"></object-type>
@@ -73,7 +78,14 @@
 <object-type name="QSGRectangleNode"/>
 <object-type name="QSGRenderNode"/>
 <object-type name="QSGRenderNode::RenderState"/>
-<rejection class="QSGRendererInterface"/>
+<interface-type name="QSGRendererInterface"/>
+<enum-type name="QSGRendererInterface::GraphicsApi"/>
+<rejection class="QSGRendererInterface" function-name="getResource"/>
+<enum-type name="QSGRendererInterface::ShaderType"/>
+<enum-type name="QSGRendererInterface::ShaderCompilationType" flags="QSGRendererInterface::ShaderCompilationTypes"/>
+<enum-type name="QSGRendererInterface::ShaderSourceType" flags="QSGRendererInterface::ShaderSourceTypes"/>
+<enum-type name="QSGRendererInterface::RenderMode"/>
+<rejection class="QSGRendererInterface" enum-name="Resource"/>
 
 <enum-type name="QSGImageNode::TextureCoordinatesTransformFlag"/>
 <enum-type name="QSGRenderNode::RenderingFlag"/>
